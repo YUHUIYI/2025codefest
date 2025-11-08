@@ -20,6 +20,14 @@ export interface Product {
   note?: string;                   // 可選擇性備註
 }
 
+export interface ProductResponse {
+  id: string;
+  product_name: string;
+  price: number;
+  store_id: string;
+  store_name: string;
+}
+
 /**
  * 店家介面（對應 Firestore stores 集合）
  */
