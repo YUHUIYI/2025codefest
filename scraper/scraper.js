@@ -43,7 +43,7 @@ function delay(ms) {
 
 // CSV 寫入器設定
 const csvWriter = createCsvWriter({
-  path: 'vendors_4.csv',
+  path: 'vendors_5.csv',
   header: [
     { id: 'name', title: '商家名稱' },
     { id: 'address', title: '地址' },
@@ -702,13 +702,13 @@ async function scrapeVendors() {
           
           // 構建完整 URL
           if (!href.startsWith('http')) {
-            if (href.startsWith('/')) {
-              // 絕對路徑，直接加上域名
-              href = `https://500.gov.tw${href}`;
+              if (href.startsWith('/')) {
+                // 絕對路徑，直接加上域名
+                href = `https://500.gov.tw${href}`;
             } else if (href.startsWith('?')) {
               // 以 ? 開頭，是查詢參數
               href = `https://500.gov.tw/FOAS/actions/Vendor114.action${href}`;
-            } else if (href.includes('Vendor114.action')) {
+              } else if (href.includes('Vendor114.action')) {
               // 如果已經包含 Vendor114.action，檢查是否需要加上基礎路徑
               if (href.startsWith('Vendor114.action')) {
                 // 格式：Vendor114.action?productList&seqno=...
@@ -717,11 +717,11 @@ async function scrapeVendors() {
                 // 格式：/FOAS/actions/Vendor114.action?...
                 href = `https://500.gov.tw${href.startsWith('/') ? '' : '/'}${href}`;
               }
-            } else if (href.includes('productList') && href.includes('seqno')) {
-              // 如果包含查詢參數關鍵字，構建完整 URL
-              href = `https://500.gov.tw/FOAS/actions/Vendor114.action?${href}`;
-            } else {
-              // 其他情況，嘗試加上完整路徑
+              } else if (href.includes('productList') && href.includes('seqno')) {
+                // 如果包含查詢參數關鍵字，構建完整 URL
+                href = `https://500.gov.tw/FOAS/actions/Vendor114.action?${href}`;
+              } else {
+                // 其他情況，嘗試加上完整路徑
               href = `https://500.gov.tw/FOAS/actions/Vendor114.action?${href}`;
             }
           }
@@ -760,10 +760,10 @@ async function scrapeVendors() {
             data.address = address.trim();
           }
           
-          if (data.name && data.address && data.address.includes('臺北市')) {
-            vendors.push(data);
-          }
-        });
+        if (data.name && data.address && data.address.includes('臺北市')) {
+          vendors.push(data);
+        }
+      });
       }
       
       // 去重：根據店名去重（避免重複）
@@ -892,22 +892,22 @@ async function scrapeVendors() {
     console.log(`開始進入詳情頁提取完整資料...\n`);
     
     const vendors = [];
-    const startIndex = 399; // 第400家（索引從0開始，所以是399）
+    const startIndex = 357; // 第358家（索引從0開始，所以是357）
     
     // 檢查列表長度
     if (vendorsList.length <= startIndex) {
-      console.log(`⚠ 警告: 列表只有 ${vendorsList.length} 家，不足第 400 家，無法爬取`);
+      console.log(`⚠ 警告: 列表只有 ${vendorsList.length} 家，不足第 358 家，無法爬取`);
       console.log(`總共爬取 0 個店家`);
       return;
     }
     
-    const endIndex = Math.min(449, vendorsList.length - 1); // 第450家或列表末尾
+    const endIndex = Math.min(377, vendorsList.length - 1); // 第378家或列表末尾
     const totalToScrape = endIndex - startIndex + 1;
     console.log(`將爬取第 ${startIndex + 1} 家到第 ${endIndex + 1} 家（共 ${totalToScrape} 家）\n`);
     
     const seenNames = new Set(); // 用於檢測重複
     
-    // 逐個進入詳情頁提取完整資料（從第400家開始）
+    // 逐個進入詳情頁提取完整資料（從第358家開始）
     for (let i = startIndex; i <= endIndex; i++) {
       const basicInfo = vendorsList[i];
       const actualIndex = i + 1; // 實際編號（從1開始）
@@ -1379,7 +1379,7 @@ async function scrapeVendors() {
 
     // 寫入 CSV
     await csvWriter.writeRecords(vendors);
-    console.log(`\n✓ CSV 檔案已生成: vendors_4.csv`);
+    console.log(`\n✓ CSV 檔案已生成: vendors_5.csv`);
     console.log(`總共寫入 ${vendors.length} 筆資料`);
     
     // 統計資料完整性
