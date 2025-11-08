@@ -29,6 +29,7 @@ enum MyServiceItemId {
   library,
   locationSearch,
   zoo,
+  sportsVoucher,
   ;
 }
 
@@ -182,6 +183,13 @@ extension MyServiceIdExt on MyServiceItemId {
           icon: Assets.svg.iconZoo24.svg(),
           category: MyServiceCategory.explore,
           destinationUrl: '',
+        ),
+      MyServiceItemId.sportsVoucher => MyServiceItem(
+          title: '動茲券查詢',
+          description: '動茲券合作店家查詢與配對',
+          icon: Assets.svg.iconCouponTicket.svg(),
+          category: MyServiceCategory.cityLife,
+          destinationUrl: 'local://sv/home',
         ),
     };
   }
