@@ -41,9 +41,9 @@ class SvMerchant {
   }) {
     final position = _parseLocation(map);
     return SvMerchant(
-      id: _parseInt(map['id']) ??
-          _parseInt(documentId) ??
-          0,
+      id: _parseNullableString(map['id']) ??
+          _parseNullableString(documentId) ??
+          '',
       name: (map['store_name'] ?? map['name'] ?? '').toString(),
       address: (map['address'] ?? '').toString(),
       lat: position['lat'] ?? _parseDouble(map['lat']),
