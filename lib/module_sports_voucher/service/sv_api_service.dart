@@ -1,26 +1,62 @@
 import 'dart:convert';
-import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
+import 'package:town_pass/config/app_config.dart';
 
 /// 動滋券 API 服務
-/// 目前使用模擬資料，未來可替換為真實 API
 class SvApiService {
-  static const String _mockDataPath = 'assets/mock_data/sv_merchants.json';
+  final http.Client _client;
+
+  SvApiService({http.Client? client}) : _client = client ?? http.Client();
+
+  /// 建構 API URI
+  Uri _buildUri(String path, {Map<String, String>? queryParameters}) {
+    final baseUrl = AppConfig.apiBaseUrl;
+    final uri = Uri.parse(baseUrl);
+    return uri.replace(
+      path: '${uri.path}$path',
+      queryParameters: queryParameters,
+    );
+  }
 
   /// 取得所有合作店家
   Future<List<SvMerchant>> fetchMerchants() async {
     try {
-      // 模擬 API 延遲
-      await Future.delayed(const Duration(milliseconds: 500));
+      final response = await _client.get(
+        _buildUri('/stores'),
+        headers: {'Accept': 'application/json'},
+      );
 
-      // 從本地 JSON 檔案讀取模擬資料
-      final String jsonString = await rootBundle.loadString(_mockDataPath);
-      final List<dynamic> jsonList = json.decode(jsonString) as List<dynamic>;
-      
-      return jsonList.map((json) => SvMerchant.fromJson(json as Map<String, dynamic>)).toList();
+      if (response.statusCode != 200) {
+        throw Exception('取得店家資料失敗：HTTP ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      final data = decoded['data'] as List<dynamic>?;
+
+      if (data == null || data.isEmpty) {
+        return [];
+      }
+
+      return data.map((item) {
+        final store = item as Map<String, dynamic>;
+        final storeId = store['store_id'];
+        return SvMerchant(
+          id: storeId != null ? storeId.toString() : store['id'] as String? ?? '',
+          name: store['store_name'] as String? ?? store['name'] as String? ?? '',
+          address: store['address'] as String? ?? '',
+          lat: _extractLatitude(store),
+          lng: _extractLongitude(store),
+          minSpend: _extractMinPrice(store),
+          phone: store['phone'] as String?,
+          description: store['description'] as String?,
+          imageUrl: store['image_url'] as String?,
+        );
+      }).toList();
     } catch (e) {
-      // 如果讀取失敗，返回預設模擬資料
-      return _getDefaultMockData();
+      print('取得店家資料失敗：$e');
+      // 如果 API 失敗，返回空列表
+      return [];
     }
   }
 
@@ -31,69 +67,90 @@ class SvApiService {
   }
 
   /// 根據 ID 取得店家
-  Future<SvMerchant?> fetchMerchantById(int id) async {
-    final allMerchants = await fetchMerchants();
+  Future<SvMerchant?> fetchMerchantById(String id) async {
     try {
-      return allMerchants.firstWhere((merchant) => merchant.id == id);
+      final response = await _client.get(
+        _buildUri('/stores/$id'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      final store = decoded['data'] as Map<String, dynamic>?;
+
+      if (store == null) {
+        return null;
+      }
+
+      final storeId = store['store_id'];
+      return SvMerchant(
+        id: storeId != null ? storeId.toString() : store['id'] as String? ?? id,
+        name: store['store_name'] as String? ?? store['name'] as String? ?? '',
+        address: store['address'] as String? ?? '',
+        lat: _extractLatitude(store),
+        lng: _extractLongitude(store),
+        minSpend: _extractMinPrice(store),
+        phone: store['phone'] as String?,
+        description: store['description'] as String?,
+        imageUrl: store['image_url'] as String?,
+      );
     } catch (e) {
+      print('取得店家資料失敗：$e');
       return null;
     }
   }
 
-  /// 預設模擬資料（當 JSON 檔案不存在時使用）
-  List<SvMerchant> _getDefaultMockData() {
-    return [
-      SvMerchant(
-        id: 1,
-        name: '台北運動中心',
-        address: '台北市信義區信義路五段1號',
-        lat: 25.0330,
-        lng: 121.5654,
-        minSpend: 100.0,
-        phone: '02-2345-6789',
-        description: '提供多種運動設施與課程',
-      ),
-      SvMerchant(
-        id: 2,
-        name: '陽光健身房',
-        address: '台北市大安區忠孝東路四段200號',
-        lat: 25.0414,
-        lng: 121.5533,
-        minSpend: 200.0,
-        phone: '02-2777-8888',
-        description: '24小時營業的現代化健身房',
-      ),
-      SvMerchant(
-        id: 3,
-        name: '游泳俱樂部',
-        address: '台北市中山區南京東路三段100號',
-        lat: 25.0520,
-        lng: 121.5440,
-        minSpend: 150.0,
-        phone: '02-2500-1234',
-        description: '專業游泳教學與訓練',
-      ),
-      SvMerchant(
-        id: 4,
-        name: '羽球館',
-        address: '台北市松山區八德路四段200號',
-        lat: 25.0480,
-        lng: 121.5570,
-        minSpend: 300.0,
-        phone: '02-2766-7890',
-        description: '專業羽球場地租借',
-      ),
-      SvMerchant(
-        id: 5,
-        name: '網球場',
-        address: '台北市內湖區內湖路一段200號',
-        lat: 25.0790,
-        lng: 121.5650,
-        minSpend: 250.0,
-        phone: '02-2799-5678',
-        description: '戶外網球場地',
-      ),
-    ];
+  /// 從 store 資料中提取緯度
+  double _extractLatitude(Map<String, dynamic> store) {
+    try {
+      final location = store['location'];
+      if (location is Map) {
+        // Firestore GeoPoint 格式：{"latitude": xxx, "longitude": xxx}
+        final lat = location['latitude'] ?? location['_latitude'];
+        if (lat != null) {
+          return (lat as num).toDouble();
+        }
+      }
+      return 0.0;
+    } catch (e) {
+      return 0.0;
+    }
+  }
+
+  /// 從 store 資料中提取經度
+  double _extractLongitude(Map<String, dynamic> store) {
+    try {
+      final location = store['location'];
+      if (location is Map) {
+        // Firestore GeoPoint 格式：{"latitude": xxx, "longitude": xxx}
+        final lng = location['longitude'] ?? location['_longitude'];
+        if (lng != null) {
+          return (lng as num).toDouble();
+        }
+      }
+      return 0.0;
+    } catch (e) {
+      return 0.0;
+    }
+  }
+
+  /// 從 store 資料中提取最低價格
+  double _extractMinPrice(Map<String, dynamic> store) {
+    try {
+      final priceRange = store['price_range'];
+      if (priceRange is Map) {
+        final min = priceRange['min'];
+        if (min != null) {
+          return (min as num).toDouble();
+        }
+      }
+      // 如果沒有 price_range，使用預設值
+      return 0.0;
+    } catch (e) {
+      return 0.0;
+    }
   }
 }
-

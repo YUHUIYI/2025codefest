@@ -1,5 +1,7 @@
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+require('dotenv').config(); // 載入 .env 檔案
 
 // 使用 functions 目錄的 node_modules
 const functionsNodeModules = path.join(__dirname, 'functions', 'node_modules');
@@ -54,11 +56,65 @@ if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FUNCTIONS_EMULATOR === 't
 
 const db = admin.firestore();
 
-// CSV 欄位對應
-function mapCsvToStore(row) {
+/**
+ * 使用 Google Geocoding API 將地址轉換為座標
+ */
+async function geocodeAddress(address) {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  
+  if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+    console.warn('⚠️  未設定 GOOGLE_MAPS_API_KEY，將使用預設座標 (0, 0)');
+    return new admin.firestore.GeoPoint(0, 0);
+  }
+  
+  return new Promise((resolve) => {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}&language=zh-TW&region=tw`;
+    
+    https.get(url, (res) => {
+      let data = '';
+      
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          
+          if (result.status === 'OK' && result.results.length > 0) {
+            const location = result.results[0].geometry.location;
+            resolve(new admin.firestore.GeoPoint(location.lat, location.lng));
+          } else {
+            console.warn(`⚠️  Geocoding 失敗 (${result.status}): ${address}`);
+            resolve(new admin.firestore.GeoPoint(0, 0));
+          }
+        } catch (error) {
+          console.error(`❌ 解析 Geocoding 回應失敗: ${address}`, error);
+          resolve(new admin.firestore.GeoPoint(0, 0));
+        }
+      });
+    }).on('error', (error) => {
+      console.error(`❌ Geocoding API 請求失敗: ${address}`, error);
+      resolve(new admin.firestore.GeoPoint(0, 0));
+    });
+  });
+}
+
+// CSV 欄位對應（改為 async 函數）
+async function mapCsvToStore(row, storeId) {
+  const address = row['地址']?.trim() || null;
+  
+  // 如果有地址，嘗試取得座標
+  let location = new admin.firestore.GeoPoint(0, 0);
+  if (address) {
+    location = await geocodeAddress(address);
+    // 加入延遲避免超過 API rate limit (每秒最多 50 次請求)
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
   return {
     store_name: row['商家名稱']?.trim() || null,
-    address: row['地址']?.trim() || null,
+    address: address,
     phone: row['營業電話']?.trim() || null,
     businessHours: row['營業時間']?.trim() || null,
     website: row['網址']?.trim() || null,
@@ -66,7 +122,7 @@ function mapCsvToStore(row) {
     category: row['類別']?.trim() || null,
     image_url: null, // CSV 沒有此欄位
     is_active: true,
-    location: new admin.firestore.GeoPoint(0, 0), // 預設 [0° N, 0° E]
+    location: location, // 使用 geocoded 座標
     updated_at: admin.firestore.FieldValue.serverTimestamp(),
   };
 }
@@ -122,7 +178,8 @@ async function uploadStores(csvFilePath, startRow = 1, endRow = 2) {
       for (let i = batchStart; i < batchEnd; i++) {
         const record = storesToUpload[i];
         try {
-          const storeData = mapCsvToStore(record);
+          const storeId = startIndex + i + 1;
+          const storeData = await mapCsvToStore(record, storeId); // 改為 await
 
           // 驗證必要欄位
           if (!storeData.store_name || !storeData.address) {
@@ -131,13 +188,13 @@ async function uploadStores(csvFilePath, startRow = 1, endRow = 2) {
             continue;
           }
 
-          const storeRef = db.collection('stores').doc();
+          const storeRef = db.collection('stores').doc(storeId.toString());
           batch.set(storeRef, storeData);
           batchCount++;
           totalCount++;
 
-          if ((i + 1) % 50 === 0 || i === batchEnd - 1) {
-            process.stdout.write(`\r  進度: ${i + 1}/${storesToUpload.length} (${Math.round((i + 1) / storesToUpload.length * 100)}%)`);
+          if ((i + 1) % 10 === 0 || i === batchEnd - 1) {
+            process.stdout.write(`\r  進度: ${i + 1}/${storesToUpload.length} (${Math.round((i + 1) / storesToUpload.length * 100)}%) - 正在 geocoding...`);
           }
         } catch (error) {
           console.error(`\n❌ 處理第 ${startRow + i} 行時發生錯誤:`, error);

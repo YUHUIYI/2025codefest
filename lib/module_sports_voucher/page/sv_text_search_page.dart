@@ -26,7 +26,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<SvMerchant> _allMerchants = [];
   List<SvMerchant> _displayedMerchants = [];
-  List<int> _likedIds = [];
+  List<String> _likedIds = [];
   String _filterMode = 'all'; // 'all', 'affordable', 'liked'
   double? _balance;
   bool _isLoading = true;

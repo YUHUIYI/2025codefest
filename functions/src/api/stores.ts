@@ -226,3 +226,109 @@ export async function toggleLike(req: Request, res: Response): Promise<void> {
   }
 }
 
+/**
+ * POST /api/stores/:id/fields - 新增或覆蓋指定欄位
+ */
+export async function addOrUpdateFields(req: Request, res: Response): Promise<void> {
+  try {
+    const storeId = req.params.id;
+    const data = req.body;
+
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      res.status(400).json({
+        success: false,
+        error: 'Request body must be an object with field names and values',
+      });
+      return;
+    }
+
+    const db = getDb();
+    const storeRef = db.collection('stores').doc(storeId);
+    const storeDoc = await storeRef.get();
+
+    if (!storeDoc.exists) {
+      res.status(404).json({
+        success: false,
+        error: 'Store not found',
+      });
+      return;
+    }
+
+    await storeRef.set(
+      {
+        ...data,
+        updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'Fields added or updated successfully',
+    });
+  } catch (error) {
+    console.error('Error adding fields:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add or update fields',
+    });
+  }
+}
+
+/**
+ * PATCH /api/stores/:id - 更新指定欄位（僅允許既有欄位）
+ */
+export async function updateStore(req: Request, res: Response): Promise<void> {
+  try {
+    const storeId = req.params.id;
+    const updates = req.body as Record<string, unknown>;
+
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+      res.status(400).json({
+        success: false,
+        error: 'Request body must be an object with fields to update',
+      });
+      return;
+    }
+
+    const db = getDb();
+    const storeRef = db.collection('stores').doc(storeId);
+    const storeDoc = await storeRef.get();
+
+    if (!storeDoc.exists) {
+      res.status(404).json({
+        success: false,
+        error: 'Store not found',
+      });
+      return;
+    }
+
+    const allowedFields = new Set(Object.keys(storeDoc.data() || {}));
+    const invalidFields = Object.keys(updates).filter((field) => !allowedFields.has(field));
+
+    if (invalidFields.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: `Invalid fields: ${invalidFields.join(', ')}`,
+      });
+      return;
+    }
+
+    await storeRef.update({
+      ...updates,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    res.json({
+      success: true,
+      message: 'Store updated successfully',
+    });
+  } catch (error) {
+    console.error('Error updating store:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update store',
+    });
+  }
+}
+

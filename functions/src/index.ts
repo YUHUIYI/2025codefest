@@ -8,6 +8,8 @@ import {
   getStoreById,
   filterStores,
   toggleLike,
+  addOrUpdateFields,
+  updateStore,
 } from './api/stores';
 
 // 初始化 Firebase Admin
@@ -32,6 +34,8 @@ app.get('/stores', getAllStores);
 app.get('/stores/filter', filterStores);
 app.get('/stores/:id', getStoreById);
 app.post('/stores/:id/like', toggleLike);
+app.post('/stores/:id/fields', addOrUpdateFields);
+app.patch('/stores/:id', updateStore);
 
 // 健康檢查端點
 app.get('/health', (req: Request, res: Response) => {

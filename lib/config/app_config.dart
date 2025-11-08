@@ -8,6 +8,11 @@ class AppConfig {
     return dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
   }
 
+  /// API 基底網址
+  static String get apiBaseUrl {
+    return dotenv.env['API_BASE_URL'] ?? '';
+  }
+
   /// 載入環境變數檔案
   static Future<void> load() async {
     try {
