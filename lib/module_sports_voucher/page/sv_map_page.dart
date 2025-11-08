@@ -139,7 +139,6 @@ class _SvMapPageState extends State<SvMapPage> {
         position: LatLng(merchant.lat, merchant.lng),
         infoWindow: InfoWindow(
           title: merchant.name,
-          snippet: '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
         ),
         onTap: () => _onMarkerTapped(merchant),
       );
@@ -424,7 +423,6 @@ class _SvMapPageState extends State<SvMapPage> {
         position: LatLng(merchant.lat, merchant.lng),
         infoWindow: InfoWindow(
           title: merchant.name,
-          snippet: '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
         ),
         onTap: () => _onMarkerTapped(merchant),
       );
@@ -673,39 +671,9 @@ class _SvMapPageState extends State<SvMapPage> {
               }
             },
           ),
-          // 剩餘金額顯示條
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: TPColors.primary50,
-              child: Row(
-                children: [
-                  Icon(
-                    _balance > 0 ? Icons.account_balance_wallet : Icons.warning_amber_rounded,
-                    size: 20,
-                    color: _balance > 0 ? TPColors.primary500 : TPColors.grayscale600,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _balance > 0
-                          ? '💰 目前餘額：${SvFormatter.formatCurrency(_balance)}'
-                          : '⚠️ 尚未儲存餘額，僅供瀏覽查詢。',
-                      style: TPTextStyles.bodyRegular.copyWith(
-                        color: _balance > 0 ? TPColors.primary600 : TPColors.grayscale600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
           // 篩選按鈕
           Positioned(
-            top: 60,
+            top: 16,
             left: 16,
             right: 16,
             child: Container(
@@ -792,79 +760,91 @@ class _SvMapPageState extends State<SvMapPage> {
       future: _storageService.isLiked(merchant.id),
       builder: (context, snapshot) {
         final isLiked = snapshot.data ?? false;
+        // 取得該店家的最低商品價格，如果沒有則使用 merchant.minSpend
+        final minPrice = _storeMinProductPrices[merchant.id] ?? merchant.minSpend;
+        
         return Opacity(
-          opacity: 0.8,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: TPColors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: TPColors.grayscale950.withOpacity(0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        merchant.name,
-                        style: TPTextStyles.h3SemiBold.copyWith(color: TPColors.grayscale950),
-                      ),
-                    ),
-                    // 愛心按鈕
-                    IconButton(
-                      icon: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked ? TPColors.red500 : TPColors.grayscale400,
-                      ),
-                      onPressed: () => _toggleLike(merchant),
-                    ),
-                    // 叉叉按鈕
-                    IconButton(
-                      icon: const Icon(Icons.close, color: TPColors.grayscale950),
-                      onPressed: _closeInfoCard,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (merchant.category != null) ...[
-                  Text(
-                    '類別：${merchant.category}',
-                    style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+          opacity: 0.95,
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _showDetail = true;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: TPColors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: TPColors.grayscale950.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
-                  const SizedBox(height: 8),
                 ],
-                InkWell(
-                  onTap: () => _openGoogleMapsForMerchant(merchant),
-                  child: Row(
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
                       Expanded(
                         child: Text(
-                          merchant.address,
-                          style: TPTextStyles.bodyRegular.copyWith(
-                            color: TPColors.primary500,
-                            decoration: TextDecoration.underline,
-                          ),
+                          merchant.name,
+                          style: TPTextStyles.h3SemiBold.copyWith(color: TPColors.grayscale950),
                         ),
                       ),
-                      const Icon(Icons.arrow_forward_ios, size: 12, color: TPColors.primary500),
+                      // 愛心按鈕
+                      IconButton(
+                        icon: Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          color: isLiked ? TPColors.red500 : TPColors.grayscale400,
+                        ),
+                        onPressed: () => _toggleLike(merchant),
+                      ),
+                      // 叉叉按鈕
+                      IconButton(
+                        icon: const Icon(Icons.close, color: TPColors.grayscale950),
+                        onPressed: _closeInfoCard,
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
-                  style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  if (merchant.category != null) ...[
+                    Text(
+                      '類別：${merchant.category}',
+                      style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  InkWell(
+                    onTap: () => _openGoogleMapsForMerchant(merchant),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            merchant.address,
+                            style: TPTextStyles.bodyRegular.copyWith(
+                              color: TPColors.primary500,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.arrow_forward_ios, size: 12, color: TPColors.primary500),
+                      ],
+                    ),
+                  ),
+                  if (minPrice > 0) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '最低消費：${SvFormatter.formatCurrency(minPrice)}',
+                      style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         );
@@ -877,8 +857,11 @@ class _SvMapPageState extends State<SvMapPage> {
       future: _storageService.isLiked(merchant.id),
       builder: (context, snapshot) {
         final isLiked = snapshot.data ?? false;
+        // 取得該店家的最低商品價格，如果沒有則使用 merchant.minSpend
+        final minPrice = _storeMinProductPrices[merchant.id] ?? merchant.minSpend;
+        
         return Opacity(
-          opacity: 0.8,
+          opacity: 0.95,
           child: Container(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.6,
@@ -942,12 +925,14 @@ class _SvMapPageState extends State<SvMapPage> {
                           value: merchant.address,
                           onTap: () => _openGoogleMapsForMerchant(merchant),
                         ),
-                        const SizedBox(height: 16),
-                        _buildDetailRow(
-                          icon: Icons.payment,
-                          label: '最低消費',
-                          value: SvFormatter.formatCurrency(merchant.minSpend),
-                        ),
+                        if (minPrice > 0) ...[
+                          const SizedBox(height: 16),
+                          _buildDetailRow(
+                            icon: Icons.payment,
+                            label: '最低消費',
+                            value: SvFormatter.formatCurrency(minPrice),
+                          ),
+                        ],
                         if (merchant.phone != null) ...[
                           const SizedBox(height: 16),
                           _buildDetailRow(
