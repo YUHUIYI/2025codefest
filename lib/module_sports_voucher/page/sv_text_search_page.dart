@@ -140,6 +140,21 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
         }).toList();
       }
 
+      // 排序：有最低消費的店家排在前面（不需要按金額排序）
+      filtered.sort((a, b) {
+        final priceA = _getEffectiveMinPrice(a);
+        final priceB = _getEffectiveMinPrice(b);
+        final hasPriceA = priceA > 0;
+        final hasPriceB = priceB > 0;
+        
+        // 如果 A 有價格但 B 沒有，A 排在前面
+        if (hasPriceA && !hasPriceB) return -1;
+        // 如果 B 有價格但 A 沒有，B 排在前面
+        if (!hasPriceA && hasPriceB) return 1;
+        // 如果都有價格或都沒有價格，保持原順序
+        return 0;
+      });
+
       _displayedMerchants = filtered;
     });
   }
@@ -162,9 +177,9 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.8,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: TPColors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -216,8 +231,8 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                       icon: Icons.location_on,
                       label: '地址',
                       value: merchant.address,
-                      onTap: merchant.address.isNotEmpty
-                          ? () => _launchGoogleMaps(merchant.address)
+                      onTap: merchant.name.isNotEmpty
+                          ? () => _launchGoogleMaps(merchant.name)
                           : null,
                     ),
                     const SizedBox(height: 16),
@@ -441,7 +456,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
               const SizedBox(height: 8),
               if (merchant.address.isNotEmpty)
                 InkWell(
-                  onTap: () => _launchGoogleMaps(merchant.address),
+                  onTap: () => _launchGoogleMaps(merchant.name),
                   child: Text(
                     merchant.address,
                     style: TPTextStyles.bodyRegular.copyWith(
@@ -455,33 +470,54 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                   '暫無地址資訊',
                   style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale500),
                 ),
-              // 最低消費標籤（如果為 0 則不顯示）
-              if (minPrice > 0) ...[
+              // 最低消費和類別標籤（最低消費靠左，類別靠右）
+              if (minPrice > 0 || (merchant.category != null && merchant.category!.isNotEmpty)) ...[
                 const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: TPColors.primary500,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '最低消費 : ${SvFormatter.formatCurrency(minPrice)}',
-                    style: TPTextStyles.caption.copyWith(
-                      color: TPColors.white,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              if (merchant.description != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  merchant.description!,
-                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale600),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // 最低消費標籤（如果為 0 則不顯示，靠左對齊）
+                    if (minPrice > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: TPColors.primary500,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '最低消費 : ${SvFormatter.formatCurrency(minPrice)}',
+                          style: TPTextStyles.caption.copyWith(
+                            color: TPColors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    // 類別標籤（靠右對齊）
+                    if (merchant.category != null && merchant.category!.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: TPColors.primary100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          merchant.category!,
+                          style: TPTextStyles.caption.copyWith(
+                            color: TPColors.primary600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    else
+                      const SizedBox.shrink(),
+                  ],
                 ),
               ],
             ],
@@ -492,9 +528,6 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
   }
 
   Widget _buildFilterButton() {
-    final hasActiveFilter = _showFavoritesOnly ||
-        (_priceSliderMax > 0 && (_priceSliderMax - _priceSliderValue).abs() > 0.1);
-
     return InkWell(
       onTap: _showFilterSheet,
       borderRadius: BorderRadius.circular(12),
@@ -502,7 +535,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: hasActiveFilter ? TPColors.primary500 : TPColors.primary200,
+          color: TPColors.primary500, // 與最低消費標籤相同的顏色
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Icon(
@@ -558,7 +591,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                     ],
                   ),
                 );
-              }).toList(),
+              }),
             ],
           ),
         ),
@@ -566,9 +599,9 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     );
   }
 
-  Future<void> _launchGoogleMaps(String address) async {
-    final encodedAddress = Uri.encodeComponent(address);
-    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+  Future<void> _launchGoogleMaps(String query) async {
+    final encodedQuery = Uri.encodeComponent(query);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedQuery');
 
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -760,7 +793,8 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     }
 
     final rounded = (maxPrice / 100).ceil() * 100;
-    return math.max(rounded.toDouble(), 100);
+    // 限制最大價格上限為 4000
+    return math.min(math.max(rounded.toDouble(), 100), 4000);
   }
 
   double? _getStoreMinPrice(List<Map<String, dynamic>> products) {

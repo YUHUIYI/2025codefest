@@ -48,7 +48,7 @@ class _SvMapPageState extends State<SvMapPage> {
   Map<String, double> _storeMinProductPrices = {};
   Map<String, double> _storeDistancesKm = {};
   Set<String> _likedMerchantIds = {};
-  String _filterMode = 'all'; // 'all', 'affordable', 'liked', 'distance', 'price', 'favorite'
+  final String _filterMode = 'all'; // 'all', 'affordable', 'liked', 'distance', 'price', 'favorite'
   double _balance = 0;
   bool _showDetail = false;
   List<SvMerchant> _displayedMerchants = [];
@@ -451,9 +451,9 @@ class _SvMapPageState extends State<SvMapPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.8,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: TPColors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -1153,7 +1153,7 @@ class _SvMapPageState extends State<SvMapPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
+                const Icon(
                   Icons.location_on,
                   size: 16,
                   color: TPColors.primary500,
