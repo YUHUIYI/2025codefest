@@ -89,3 +89,6 @@ app.*.map.json
 
 # FVM Version Cache
 .fvm/
+
+# Exclude TownPass directory (official repository clone)
+TownPass/
