@@ -11,7 +11,27 @@ Currently no authentication is required. All requests accept and return JSON.
 
 ## Endpoints
 
-### 1. List Active Stores
+### 1. Health Check
+- **Method**: `GET`
+- **Path**: `/health`
+- **Description**: Returns a simple status payload to verify the function is alive.
+
+#### Example
+```bash
+curl "https://api-ffuxb6ym4q-de.a.run.app/health"
+```
+
+**Sample Response**
+```json
+{
+  "status": "ok",
+  "timestamp": "2025-11-08T02:30:00.123Z"
+}
+```
+
+---
+
+### 2. List Active Stores
 - **Method**: `GET`
 - **Path**: `/stores`
 - **Description**: Returns every store where `is_active === true`.
@@ -23,7 +43,7 @@ curl "https://api-ffuxb6ym4q-de.a.run.app/stores"
 
 ---
 
-### 2. Get Store By ID
+### 3. Get Store By ID
 - **Method**: `GET`
 - **Path**: `/stores/{storeId}`
 - **Description**: Fetch a single store document by Firestore document ID.
@@ -35,7 +55,7 @@ curl "https://api-ffuxb6ym4q-de.a.run.app/stores/123"
 
 ---
 
-### 3. Filter Stores
+### 4. Filter Stores
 - **Method**: `GET`
 - **Path**: `/stores/filter`
 - **Query Parameters** (all optional):
@@ -54,7 +74,7 @@ curl "https://api-ffuxb6ym4q-de.a.run.app/stores/filter?category=%E9%81%8B%E5%8B
 
 ---
 
-### 4. Toggle Like
+### 5. Toggle Like
 - **Method**: `POST`
 - **Path**: `/stores/{storeId}/like`
 - **Body**:
@@ -75,7 +95,7 @@ curl -X POST \
 
 ---
 
-### 5. Add or Update Fields
+### 6. Add or Update Fields
 - **Method**: `POST`
 - **Path**: `/stores/{storeId}/fields`
 - **Body**: JSON object, keys are field names, values are written directly to Firestore. Existing fields are overwritten.
@@ -95,7 +115,7 @@ curl -X POST \
 
 ---
 
-### 6. Update Existing Fields
+### 7. Update Existing Fields
 - **Method**: `PATCH`
 - **Path**: `/stores/{storeId}`
 - **Body**: JSON object with fields already present in the document (e.g. `is_active`, `website`). Any new/unknown fields trigger a 400 response.
@@ -111,6 +131,47 @@ curl -X PATCH \
       }'
 ```
 - **Response**: `{ "success": true, "message": "Store updated successfully" }`
+
+---
+
+### 8. List Products
+- **Method**: `GET`
+- **Path**: `/products`
+- **Description**: Returns all products and their associated store linkage. Each item includes:
+  - `id`: Product document ID
+  - `product_name`: Product display name
+  - `price`: Numeric price (defaults to `0` if missing/invalid)
+  - `store_id`: Related store document ID
+  - `store_name`: Store display name
+
+#### Example
+```bash
+curl "https://api-ffuxb6ym4q-de.a.run.app/products"
+```
+
+**Sample Response**
+```json
+{
+  "success": true,
+  "count": 2,
+  "data": [
+    {
+      "id": "prod-001",
+      "product_name": "活動咖三折旅行包",
+      "price": 268,
+      "store_id": "1",
+      "store_name": "EventPal 活動咖運動報名平台"
+    },
+    {
+      "id": "prod-002",
+      "product_name": "拳擊體驗課程",
+      "price": 499,
+      "store_id": "store_abc",
+      "store_name": "Knockout Boxing 台北"
+    }
+  ]
+}
+```
 
 ---
 
@@ -155,4 +216,5 @@ npm run serve
 ---
 
 ## Change Log
+- **2025-11-09**: Added `/products` endpoint documentation and `/health` health check section.
 - **2025-11-08**: Added `/stores/:id/fields` for adding custom fields and `/stores/:id` (PATCH) for updating existing fields.
