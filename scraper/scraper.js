@@ -43,7 +43,7 @@ function delay(ms) {
 
 // CSV 寫入器設定
 const csvWriter = createCsvWriter({
-  path: 'vendors_3.csv',
+  path: 'vendors_4.csv',
   header: [
     { id: 'name', title: '商家名稱' },
     { id: 'address', title: '地址' },
@@ -892,22 +892,22 @@ async function scrapeVendors() {
     console.log(`開始進入詳情頁提取完整資料...\n`);
     
     const vendors = [];
-    const startIndex = 229; // 第230家（索引從0開始，所以是229）
+    const startIndex = 399; // 第400家（索引從0開始，所以是399）
     
     // 檢查列表長度
     if (vendorsList.length <= startIndex) {
-      console.log(`⚠ 警告: 列表只有 ${vendorsList.length} 家，不足第 230 家，無法爬取`);
+      console.log(`⚠ 警告: 列表只有 ${vendorsList.length} 家，不足第 400 家，無法爬取`);
       console.log(`總共爬取 0 個店家`);
       return;
     }
     
-    const endIndex = Math.min(399, vendorsList.length - 1); // 第400家或列表末尾
+    const endIndex = Math.min(449, vendorsList.length - 1); // 第450家或列表末尾
     const totalToScrape = endIndex - startIndex + 1;
     console.log(`將爬取第 ${startIndex + 1} 家到第 ${endIndex + 1} 家（共 ${totalToScrape} 家）\n`);
     
     const seenNames = new Set(); // 用於檢測重複
     
-    // 逐個進入詳情頁提取完整資料（從第230家開始）
+    // 逐個進入詳情頁提取完整資料（從第400家開始）
     for (let i = startIndex; i <= endIndex; i++) {
       const basicInfo = vendorsList[i];
       const actualIndex = i + 1; // 實際編號（從1開始）
@@ -1379,7 +1379,7 @@ async function scrapeVendors() {
 
     // 寫入 CSV
     await csvWriter.writeRecords(vendors);
-    console.log(`\n✓ CSV 檔案已生成: vendors_3.csv`);
+    console.log(`\n✓ CSV 檔案已生成: vendors_4.csv`);
     console.log(`總共寫入 ${vendors.length} 筆資料`);
     
     // 統計資料完整性
