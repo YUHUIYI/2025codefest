@@ -9,7 +9,6 @@ import 'package:town_pass/module_sports_voucher/util/sv_navigator_util.dart';
 import 'package:town_pass/service/shared_preferences_service.dart';
 import 'package:town_pass/util/tp_app_bar.dart';
 import 'package:town_pass/util/tp_colors.dart';
-import 'package:town_pass/util/tp_text.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
 
 /// 動滋券首頁
@@ -30,10 +29,12 @@ class _SvHomePageState extends State<SvHomePage> {
   final FocusNode _balanceFocusNode = FocusNode();
   late final SvStorageService _storageService;
   double? _savedBalance;
+
   final List<String> _bannerImages = const [
     'assets/image/sv_banner.png',
     'assets/image/sv_banner_2.png',
   ];
+
   int _currentBannerIndex = 0;
 
   @override
@@ -42,7 +43,9 @@ class _SvHomePageState extends State<SvHomePage> {
     print('[DEBUG] SvHomePage.initState called');
     print('[DEBUG] InitialBalance: ${widget.initialBalance}');
     _storageService = SvStorageService(Get.find<SharedPreferencesService>());
+    _balanceController.addListener(_onBalanceChanged);
     _loadSavedBalance();
+
     if (widget.initialBalance != null) {
       _balanceController.text = widget.initialBalance!.toStringAsFixed(0);
     }
@@ -62,9 +65,14 @@ class _SvHomePageState extends State<SvHomePage> {
 
   @override
   void dispose() {
+    _balanceController.removeListener(_onBalanceChanged);
     _balanceController.dispose();
     _balanceFocusNode.dispose();
     super.dispose();
+  }
+
+  void _onBalanceChanged() {
+    setState(() {});
   }
 
   Future<void> _launchOfficialWebsite() async {
@@ -78,34 +86,61 @@ class _SvHomePageState extends State<SvHomePage> {
     }
   }
 
-  Future<void> _saveBalance() async {
+  Future<double?> _autoSaveBalance({bool requirePositive = false}) async {
     final balanceText = _balanceController.text.trim();
+
     if (balanceText.isEmpty) {
-      SvDialogUtil.showErrorDialog(context, '請輸入剩餘金額');
-      return;
+      await _storageService.clearBalance();
+      setState(() {
+        _savedBalance = null;
+      });
+      if (requirePositive) {
+        if (mounted) {
+          SvDialogUtil.showErrorDialog(context, '請輸入有效的金額');
+        }
+        return null;
+      }
+      return null;
     }
 
     final balance = double.tryParse(balanceText);
     if (balance == null || balance < 0) {
-      SvDialogUtil.showErrorDialog(context, '請輸入有效的金額');
-      return;
+      if (mounted) {
+        SvDialogUtil.showErrorDialog(context, '請輸入有效的金額');
+      }
+      return null;
+    }
+
+    if (requirePositive && balance <= 0) {
+      if (mounted) {
+        SvDialogUtil.showErrorDialog(context, '請輸入大於 0 的金額');
+      }
+      return null;
     }
 
     await _storageService.saveBalance(balance);
     setState(() {
       _savedBalance = balance;
     });
+    return balance;
+  }
 
-    if (mounted) {
-      Get.snackbar(
-        '成功',
-        '餘額已儲存',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: TPColors.primary500,
-        colorText: TPColors.white,
-        duration: const Duration(seconds: 2),
-      );
-    }
+  Future<void> _onMapQueryTap() async {
+    final balance = await _autoSaveBalance();
+    if (!mounted) return;
+    SvNavigatorUtil.toMap(balance: balance ?? _savedBalance);
+  }
+
+  Future<void> _onTextSearchTap() async {
+    final balance = await _autoSaveBalance();
+    if (!mounted) return;
+    SvNavigatorUtil.toTextSearch(balance: balance ?? _savedBalance);
+  }
+
+  Future<void> _onMatchTap() async {
+    final balance = await _autoSaveBalance(requirePositive: true);
+    if (!mounted || balance == null) return;
+    SvNavigatorUtil.toMatch(balance: balance);
   }
 
   Future<void> _clearAllData() async {
@@ -137,7 +172,6 @@ class _SvHomePageState extends State<SvHomePage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     print('[DEBUG] SvHomePage.build called');
@@ -151,14 +185,11 @@ class _SvHomePageState extends State<SvHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Banner 圖片
             _buildBanner(),
-            // 大卡片：輸入金額區域
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: _buildBalanceInputCard(),
             ),
-            // 查詢選項區域
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
@@ -174,68 +205,58 @@ class _SvHomePageState extends State<SvHomePage> {
                       ),
                     ),
                   ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildServiceCard(
-                          icon: Assets.svg.iconLocationSearch24.svg(),
-                          title: '地圖查詢',
-                          description: '查看店家位置',
-                          onTap: () {
-                            final balance = _savedBalance ?? double.tryParse(_balanceController.text.trim());
-                            if (balance != null && balance > 0) {
-                              SvNavigatorUtil.toMap(balance: balance);
-                            } else {
-                              SvNavigatorUtil.toMap(balance: null);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildServiceCard(
-                          icon: Assets.svg.iconCaseSearch.svg(),
-                          title: '文字搜尋',
-                          description: '搜尋店家名稱',
-                          onTap: () {
-                            final balance = _savedBalance ?? double.tryParse(_balanceController.text.trim());
-                            SvNavigatorUtil.toTextSearch(balance: balance);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildServiceCard(
-                          icon: Icon(
-                            Icons.favorite,
-                            size: 40,
-                            color: _savedBalance != null && _savedBalance! > 0
-                                ? TPColors.primary500
-                                : TPColors.grayscale400,
+                  Builder(
+                    builder: (context) {
+                      final typedBalance = double.tryParse(_balanceController.text.trim());
+                      final effectiveBalance = _savedBalance ?? typedBalance;
+                      final canMatch = (effectiveBalance ?? 0) > 0;
+
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: _buildServiceCard(
+                              icon: Assets.svg.iconLocationSearch24.svg(),
+                              title: '地圖查詢',
+                              description: '查看店家位置',
+                              onTap: _onMapQueryTap,
+                            ),
                           ),
-                          title: '餘額配對',
-                          description: '滑動配對店家',
-                          onTap: _savedBalance != null && _savedBalance! > 0
-                              ? () {
-                                  SvNavigatorUtil.toMatch(balance: _savedBalance!);
-                                }
-                              : null,
-                          isEnabled: _savedBalance != null && _savedBalance! > 0,
-                        ),
-                      ),
-                    ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildServiceCard(
+                              icon: Assets.svg.iconCaseSearch.svg(),
+                              title: '文字搜尋',
+                              description: '搜尋店家名稱',
+                              onTap: _onTextSearchTap,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildServiceCard(
+                              icon: Icon(
+                                Icons.favorite,
+                                size: 40,
+                                color: canMatch ? TPColors.primary500 : TPColors.grayscale400,
+                              ),
+                              title: '餘額配對',
+                              description: '滑動配對店家',
+                              onTap: canMatch ? _onMatchTap : null,
+                              isEnabled: canMatch,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            // 官方網站連結
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: _buildOfficialWebsiteCard(),
             ),
             const SizedBox(height: 12),
-            // 清除資料按鈕
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: _buildClearDataCard(),
@@ -412,28 +433,6 @@ class _SvHomePageState extends State<SvHomePage> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _saveBalance,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: TPColors.white,
-                foregroundColor: TPColors.primary500,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                '儲存餘額',
-                style: TPTextStyles.h3SemiBold.copyWith(
-                  color: TPColors.primary500,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -471,11 +470,7 @@ class _SvHomePageState extends State<SvHomePage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: icon,
-              ),
+              SizedBox(width: 40, height: 40, child: icon),
               const SizedBox(height: 12),
               Text(
                 title,
