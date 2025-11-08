@@ -325,4 +325,43 @@ class SvApiService {
     final merchants = await fetchMerchantsWithProducts();
     return merchants.where((merchant) => merchant.isAffordable(balance)).toList();
   }
+
+  /// 從 Firestore 取得每間店家的商品清單
+  /// 回傳 Map，key 為 storeId（字串），value 為該店商品資料列表
+  Future<Map<String, List<Map<String, dynamic>>>> fetchStoreProducts() async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final snapshot = await db.collection('products').get();
+
+      if (snapshot.docs.isEmpty) {
+        print('[SvApiService] products collection 為空');
+        return {};
+      }
+
+      final Map<String, List<Map<String, dynamic>>> groupedProducts = {};
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final rawStoreId = data['store_id'];
+
+        if (rawStoreId == null) {
+          continue;
+        }
+
+        final storeId = rawStoreId.toString();
+        final productData = {
+          'id': doc.id,
+          ...data,
+        };
+
+        groupedProducts.putIfAbsent(storeId, () => []).add(productData);
+      }
+
+      return groupedProducts;
+    } catch (e, stackTrace) {
+      print('[SvApiService] 取得商品資料失敗：$e');
+      print('[SvApiService] Stack trace: $stackTrace');
+      return {};
+    }
+  }
 }
