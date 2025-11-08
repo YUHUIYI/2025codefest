@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -36,6 +38,17 @@ class _SvMapPageState extends State<SvMapPage> {
   Set<Marker> _markers = {};
   SvMerchant? _selectedMerchant;
   SvMerchant? _lastClickedMerchant;
+
+  bool _distanceFilterEnabled = false;
+  double _distanceThresholdKm = 5.0;
+  bool _priceFilterEnabled = false;
+  double _priceThreshold = 500.0;
+  bool _likeFilterEnabled = false;
+
+  Map<String, double> _storeMinProductPrices = {};
+  Map<String, double> _storeDistancesKm = {};
+  Set<String> _likedMerchantIds = {};
+  String _filterMode = 'all'; // 'all', 'affordable', 'liked', 'distance', 'price', 'favorite'
   double _balance = 0;
   bool _showDetail = false;
 
@@ -43,7 +56,10 @@ class _SvMapPageState extends State<SvMapPage> {
   void initState() {
     super.initState();
     final args = Get.arguments as Map<String, dynamic>?;
-    _balance = args?['balance'] ?? 0.0;
+    final balanceArg = args?['balance'];
+    if (balanceArg is num) {
+      _priceThreshold = balanceArg.toDouble();
+    }
     
     _locationService = SvLocationService(Get.find<GeoLocatorService>());
     _storageService = SvStorageService(Get.find<SharedPreferencesService>());
@@ -62,7 +78,78 @@ class _SvMapPageState extends State<SvMapPage> {
       setState(() {
         _balance = _balance > 0 ? _balance : (savedBalance ?? 0.0);
       });
+  Map<String, double> _calculateMerchantDistances(
+    List<SvMerchant> merchants,
+    Position userPosition,
+  ) {
+    final Map<String, double> distances = {};
+    for (final merchant in merchants) {
+      if (merchant.lat == 0.0 && merchant.lng == 0.0) {
+        continue;
+      }
+      distances[merchant.id] = _locationService.calculateDistance(
+        userPosition.latitude,
+        userPosition.longitude,
+        merchant.lat,
+        merchant.lng,
+      );
     }
+    return distances;
+  }
+
+  List<SvMerchant> _calculateFilteredMerchants() {
+    return _allMerchants.where((merchant) {
+      if (_distanceFilterEnabled && _userPosition != null) {
+        final distance = _storeDistancesKm[merchant.id];
+        if (distance == null || distance > _distanceThresholdKm) {
+          return false;
+        }
+      }
+
+      if (_priceFilterEnabled) {
+        final minPrice = _storeMinProductPrices[merchant.id];
+      if (minPrice == null || minPrice <= 0 || minPrice > _priceThreshold) {
+          return false;
+        }
+      }
+
+      if (_likeFilterEnabled) {
+        if (!_likedMerchantIds.contains(merchant.id)) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+  }
+
+  Set<Marker> _buildMarkers(List<SvMerchant> merchants) {
+    return merchants
+        .where((merchant) => merchant.lat != 0.0 && merchant.lng != 0.0)
+        .map((merchant) {
+      return Marker(
+        markerId: MarkerId(merchant.id.toString()),
+        position: LatLng(merchant.lat, merchant.lng),
+        infoWindow: InfoWindow(
+          title: merchant.name,
+          snippet: '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
+        ),
+        onTap: () => _onMarkerTapped(merchant),
+      );
+    }).toSet();
+  }
+
+  void _applyFilters({VoidCallback? beforeSetState}) {
+    setState(() {
+      beforeSetState?.call();
+      final filteredMerchants = _calculateFilteredMerchants();
+      _displayedMerchants = filteredMerchants;
+      _markers = _buildMarkers(filteredMerchants);
+      if (_selectedMerchant != null &&
+          !filteredMerchants.any((merchant) => merchant.id == _selectedMerchant!.id)) {
+        _selectedMerchant = null;
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -98,6 +185,23 @@ class _SvMapPageState extends State<SvMapPage> {
       _updateMarkers();
       
       // 移動地圖到使用者位置
+      final minProductPrices = await _apiService.fetchStoreMinProductPrices();
+      final likedIds = await _storageService.getLikes();
+      final distances = _userPosition != null
+          ? _calculateMerchantDistances(validMerchants, _userPosition!)
+          : <String, double>{};
+
+      if (mounted) {
+        setState(() {
+          _allMerchants = validMerchants;
+          _storeMinProductPrices = minProductPrices;
+          _likedMerchantIds = likedIds.toSet();
+          _storeDistancesKm = distances;
+        });
+        _applyFilters();
+        _logLikedMerchants('initial_load');
+      }
+
       if (_mapController != null && _userPosition != null) {
         await _mapController!.animateCamera(
           CameraUpdate.newLatLng(
@@ -115,6 +219,201 @@ class _SvMapPageState extends State<SvMapPage> {
         SvDialogUtil.dismissDialog(context);
       }
     }
+  }
+
+  void _setDistanceFilterEnabled(bool enabled) {
+    if (enabled && _userPosition == null) {
+      SvDialogUtil.showErrorDialog(context, '尚未取得定位資訊，無法套用距離篩選');
+      return;
+    }
+
+    final distances = (enabled && _userPosition != null)
+        ? _calculateMerchantDistances(_allMerchants, _userPosition!)
+        : _storeDistancesKm;
+    double updatedThreshold = _distanceThresholdKm;
+    if (enabled && _userPosition != null) {
+      final computedMax =
+          distances.isNotEmpty ? distances.values.reduce(math.max) : 0.0;
+      final min = _distanceSliderMin;
+      final fallbackMax = computedMax > min ? computedMax : min + 0.5;
+      if (updatedThreshold <= 0 || updatedThreshold > fallbackMax) {
+        updatedThreshold = fallbackMax;
+      }
+    }
+
+    _applyFilters(beforeSetState: () {
+      _distanceFilterEnabled = enabled;
+      if (enabled && _userPosition != null) {
+        _storeDistancesKm = distances;
+        _distanceThresholdKm = updatedThreshold;
+      }
+    });
+  }
+
+  void _setPriceFilterEnabled(bool enabled) {
+    if (enabled && _storeMinProductPrices.isEmpty) {
+      SvDialogUtil.showErrorDialog(context, '尚未取得商品資料，無法套用金額篩選');
+      return;
+    }
+
+    final sliderMax = _priceSliderMax;
+
+    _applyFilters(beforeSetState: () {
+      _priceFilterEnabled = enabled;
+      if (enabled) {
+        if (_priceThreshold <= 0 || _priceThreshold > sliderMax) {
+          _priceThreshold = sliderMax;
+        }
+      }
+    });
+  }
+
+  void _setLikeFilterEnabled(bool enabled) {
+    _applyFilters(beforeSetState: () {
+      _likeFilterEnabled = enabled;
+    });
+  }
+
+  double get _distanceSliderMin => 0.5;
+
+  double get _distanceSliderMax {
+    if (_storeDistancesKm.isEmpty) {
+      return 10.0;
+    }
+    final maxDistance = _storeDistancesKm.values.reduce(math.max);
+    if (maxDistance > _distanceSliderMin) {
+      return maxDistance;
+    }
+    return _distanceSliderMin + 0.5;
+  }
+
+  double get _priceSliderMin => 0.0;
+
+  double get _priceSliderMax {
+    if (_storeMinProductPrices.isEmpty) {
+      return 1000.0;
+    }
+    final maxPrice = _storeMinProductPrices.values.reduce(math.max);
+    return maxPrice > 0 ? maxPrice : 1000.0;
+  }
+
+  void _updateDistanceThreshold(double value) {
+    final clamped = value.clamp(_distanceSliderMin, _distanceSliderMax).toDouble();
+    _applyFilters(beforeSetState: () {
+      _distanceThresholdKm = clamped;
+    });
+  }
+
+  void _updatePriceThreshold(double value) {
+    final clamped = value.clamp(_priceSliderMin, _priceSliderMax).toDouble();
+    _applyFilters(beforeSetState: () {
+      _priceThreshold = clamped;
+    });
+  }
+
+  Future<void> _loadBalance() async {
+    final savedBalance = await _storageService.getBalance();
+    if (mounted && savedBalance != null) {
+      setState(() {
+        _balance = _balance == 0.0 ? savedBalance : _balance;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _cameraUpdateTimer?.cancel();
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  void _logLikedMerchants(String source) {
+    if (_likedMerchantIds.isEmpty) {
+      debugPrint('[SV Map][$source] liked list is empty');
+      return;
+    }
+    final preview = _likedMerchantIds.take(10).join(', ');
+    debugPrint(
+      '[SV Map][$source] liked merchants (${_likedMerchantIds.length} total): $preview'
+          '${_likedMerchantIds.length > 10 ? ' ...' : ''}',
+    );
+  }
+
+  void _onMarkerTapped(SvMerchant merchant) {
+    final now = DateTime.now();
+    final isDoubleTap = _lastTappedMerchant?.id == merchant.id &&
+        _lastTapTime != null &&
+        now.difference(_lastTapTime!).inMilliseconds < 500;
+    
+    if (isDoubleTap) {
+      // 雙擊：顯示詳細資料
+      _showMerchantDetail(merchant);
+      _lastTappedMerchant = null;
+      _lastTapTime = null;
+    } else {
+      // 單擊：顯示簡易資訊卡
+      setState(() {
+        _selectedMerchant = merchant;
+        _lastTappedMerchant = merchant;
+        _lastTapTime = now;
+      });
+    }
+  }
+
+  Future<void> _updateDisplayedMerchants() async {
+    List<SvMerchant> merchants = [];
+    
+    switch (_filterMode) {
+      case 'affordable':
+        merchants = _allMerchants.where((m) => m.isAffordable(_balance)).toList();
+        break;
+      case 'liked':
+      case 'favorite':
+        final likedIds = await _storageService.getLikes();
+        merchants = _allMerchants.where((m) => likedIds.contains(m.id)).toList();
+        break;
+      case 'distance':
+        if (_userPosition != null) {
+          merchants = await _sortByDistance(_allMerchants);
+        } else {
+          merchants = _allMerchants;
+        }
+        break;
+      case 'price':
+        merchants = _sortByPrice(_allMerchants);
+        break;
+      default:
+        merchants = _allMerchants;
+    }
+    
+    setState(() {
+      _displayedMerchants = merchants;
+    });
+  }
+
+  Future<List<SvMerchant>> _sortByDistance(List<SvMerchant> merchants) async {
+    if (_userPosition == null) return merchants;
+    
+    final List<MapEntry<SvMerchant, double>> merchantDistances = [];
+    
+    for (final merchant in merchants) {
+      final distance = await _locationService.calculateDistanceToMerchant(
+        _userPosition!,
+        merchant,
+      );
+      if (distance != null) {
+        merchantDistances.add(MapEntry(merchant, distance));
+      }
+    }
+    
+    merchantDistances.sort((a, b) => a.value.compareTo(b.value));
+    return merchantDistances.map((entry) => entry.key).toList();
+  }
+
+  List<SvMerchant> _sortByPrice(List<SvMerchant> merchants) {
+    final sorted = List<SvMerchant>.from(merchants);
+    sorted.sort((a, b) => a.minSpend.compareTo(b.minSpend));
+    return sorted;
   }
 
   void _updateMarkers() {
@@ -338,13 +637,28 @@ class _SvMapPageState extends State<SvMapPage> {
   }
 
   Future<void> _toggleLike(SvMerchant merchant) async {
-    final isLiked = await _storageService.isLiked(merchant.id);
+    final isLiked = _likedMerchantIds.contains(merchant.id);
     if (isLiked) {
       await _storageService.removeLike(merchant.id);
     } else {
       await _storageService.addLike(merchant.id);
     }
-    setState(() {});
+
+    _applyFilters(beforeSetState: () {
+      if (isLiked) {
+        _likedMerchantIds.remove(merchant.id);
+      } else {
+        _likedMerchantIds.add(merchant.id);
+      }
+    });
+    _logLikedMerchants('toggle');
+
+    if (_selectedMerchant != null &&
+        !_displayedMerchants.any((m) => m.id == _selectedMerchant!.id)) {
+      setState(() {
+        _selectedMerchant = null;
+      });
+    }
   }
 
   Future<void> _openGoogleMaps(SvMerchant merchant) async {
@@ -507,7 +821,117 @@ class _SvMapPageState extends State<SvMapPage> {
                 Text(
                   '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
                   style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
+                    markers: _markers,
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: true,
+                    // 使用 onCameraIdle 而不是 onCameraMove 來減少更新頻率
+                    // 只在 camera 停止移動時才觸發更新，避免頻繁調用 API
+                    onCameraIdle: _onCameraIdle,
+                    onCameraMove: _onCameraMove,
+                    // 限制地圖的更新頻率，避免 buffer 過滿
+                    mapType: MapType.normal,
+                    // 限制縮放級別範圍，避免過度縮放導致頻繁請求地圖瓦片
+                    minMaxZoomPreference: const MinMaxZoomPreference(10.0, 18.0),
+                    // 啟用手勢控制
+                    zoomGesturesEnabled: true,
+                    zoomControlsEnabled: false, // 禁用縮放控制按鈕，減少 UI 更新
+                    scrollGesturesEnabled: true,
+                    tiltGesturesEnabled: false, // 禁用傾斜手勢，減少計算
+                    rotateGesturesEnabled: false, // 禁用旋轉手勢，減少計算
+                    // 禁用建築物和室內地圖，減少渲染負擔
+                    buildingsEnabled: false,
+                    indoorViewEnabled: false,
+                    // 禁用交通和地形圖層，減少網路請求
+                    trafficEnabled: false,
+                    mapToolbarEnabled: false, // 禁用地圖工具欄
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                      if (_userPosition != null) {
+                        controller.animateCamera(
+                          CameraUpdate.newLatLng(
+                            LatLng(_userPosition!.latitude, _userPosition!.longitude),
+                          ),
+                        );
+                      }
+                    },
+                  ),
                 ),
+                // 篩選按鈕
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: TPColors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: TPColors.grayscale950.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildFilterChip(
+                              label: '距離',
+                              selected: _distanceFilterEnabled,
+                              onSelected: _setDistanceFilterEnabled,
+                            ),
+                            _buildFilterChip(
+                              label: '金額',
+                              selected: _priceFilterEnabled,
+                              onSelected: _setPriceFilterEnabled,
+                            ),
+                            _buildFilterChip(
+                              label: '收藏',
+                              selected: _likeFilterEnabled,
+                              onSelected: _setLikeFilterEnabled,
+                            ),
+                          ],
+                        ),
+                        if (_distanceFilterEnabled) ...[
+                          const SizedBox(height: 12),
+                          _buildFilterSlider(
+                            label: '距離',
+                            valueLabel: '${_distanceThresholdKm.toStringAsFixed(1)} 公里內',
+                            value: _distanceThresholdKm,
+                            min: _distanceSliderMin,
+                            max: _distanceSliderMax,
+                            onChanged: _updateDistanceThreshold,
+                          ),
+                        ],
+                        if (_priceFilterEnabled) ...[
+                          const SizedBox(height: 12),
+                          _buildFilterSlider(
+                            label: '金額上限',
+                            valueLabel: '≤ ${SvFormatter.formatCurrency(_priceThreshold)}',
+                            value: _priceThreshold,
+                            min: _priceSliderMin,
+                            max: _priceSliderMax,
+                            onChanged: _updatePriceThreshold,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                // 店家資訊卡
+                if (_selectedMerchant != null)
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    right: 16,
+                    child: _buildMerchantCard(_selectedMerchant!),
+                  ),
               ],
             ),
           ),
@@ -689,6 +1113,140 @@ class _SvMapPageState extends State<SvMapPage> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool selected,
+    required ValueChanged<bool> onSelected,
+  }) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (selected) {
+        onSelected(selected);
+      },
+      selectedColor: TPColors.primary500,
+      labelStyle: TPTextStyles.bodyRegular.copyWith(
+        color: selected ? TPColors.white : TPColors.grayscale700,
+      ),
+    );
+  }
+
+  Widget _buildFilterSlider({
+    required String label,
+    required String valueLabel,
+    required double value,
+    required double min,
+    required double max,
+    required ValueChanged<double> onChanged,
+  }) {
+    final clampedValue = value.clamp(min, max).toDouble();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
+            ),
+            Text(
+              valueLabel,
+              style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+            ),
+          ],
+        ),
+        Slider(
+          value: clampedValue,
+          min: min,
+          max: max,
+          label: valueLabel,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMerchantCard(SvMerchant merchant) {
+    final isLiked = _likedMerchantIds.contains(merchant.id);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TPColors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: TPColors.grayscale950.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  merchant.name,
+                  style: TPTextStyles.h3SemiBold.copyWith(color: TPColors.grayscale950),
+                ),
+              ),
+              IconButton(
+                icon: Icon(
+                  isLiked ? Icons.favorite : Icons.cancel_outlined,
+                  color: isLiked ? TPColors.red500 : TPColors.grayscale400,
+                ),
+                onPressed: () => _toggleLike(merchant),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 類別
+          if (merchant.category != null) ...[
+            Text(
+              '類別：${merchant.category}',
+              style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+            ),
+            const SizedBox(height: 8),
+          ],
+          // 地址（可點擊）
+          InkWell(
+            onTap: () => _openGoogleMaps(merchant.lat, merchant.lng),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.location_on,
+                  size: 16,
+                  color: TPColors.primary500,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    merchant.address,
+                    style: TPTextStyles.bodyRegular.copyWith(
+                      color: TPColors.primary500,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // 最低消費
+          Text(
+            '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
+            style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
           ),
         ],
       ),

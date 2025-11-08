@@ -11,6 +11,7 @@ import {
   addOrUpdateFields,
   updateStore,
 } from './api/stores';
+import { getAllProducts } from './api/products';
 
 // 初始化 Firebase Admin
 // 在 Emulator 環境中，連接到本地 Firestore Emulator
@@ -36,6 +37,7 @@ app.get('/stores/:id', getStoreById);
 app.post('/stores/:id/like', toggleLike);
 app.post('/stores/:id/fields', addOrUpdateFields);
 app.patch('/stores/:id', updateStore);
+app.get('/products', getAllProducts);
 
 // 健康檢查端點
 app.get('/health', (req: Request, res: Response) => {
