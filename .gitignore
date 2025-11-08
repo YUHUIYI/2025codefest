@@ -97,3 +97,5 @@ app.*.map.json
 
 # Exclude TownPass directory (official repository clone)
 TownPass/
+
+ios/Podfile.lock
