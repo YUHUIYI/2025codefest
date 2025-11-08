@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 動滋券合作店家資料模型
 class SvMerchant {
-  final int id;
+  final String id;
   final String name;
   final String address;
   final double lat;

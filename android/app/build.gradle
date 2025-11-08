@@ -53,6 +53,13 @@ android {
         targetSdkVersion flutter.targetSdkVersion
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
+        
+        // Google Maps API Key (從環境變數或 local.properties 讀取)
+        def googleMapsApiKey = localProperties.getProperty('GOOGLE_MAPS_API_KEY')
+        if (googleMapsApiKey == null) {
+            googleMapsApiKey = project.findProperty('GOOGLE_MAPS_API_KEY') ?: ""
+        }
+        resValue "string", "google_maps_api_key", googleMapsApiKey
     }
 
     buildTypes {

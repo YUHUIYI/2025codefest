@@ -47,7 +47,10 @@ class _SvMapPageState extends State<SvMapPage> {
     _locationService = SvLocationService(Get.find<GeoLocatorService>());
     _storageService = SvStorageService(Get.find<SharedPreferencesService>());
     
-    _loadData();
+    // 延遲到 widget 完全初始化後再載入資料
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
@@ -58,6 +61,26 @@ class _SvMapPageState extends State<SvMapPage> {
       
       // 取得所有店家
       _allMerchants = await _apiService.fetchMerchants();
+      
+      // 檢查是否有店家資料
+      if (_allMerchants.isEmpty) {
+        if (mounted) {
+          SvDialogUtil.dismissDialog(context);
+          SvDialogUtil.showErrorDialog(context, '無法取得店家資料，請檢查網路連線或稍後再試');
+        }
+        return;
+      }
+      
+      // 過濾掉座標無效的店家（0,0 或 geocoding 失敗）
+      final validMerchants = _allMerchants.where((m) => m.lat != 0.0 && m.lng != 0.0).toList();
+      
+      if (validMerchants.isEmpty) {
+        if (mounted) {
+          SvDialogUtil.dismissDialog(context);
+          SvDialogUtil.showErrorDialog(context, '所有店家的地址都無法轉換為座標，請稍後再試');
+        }
+        return;
+      }
       
       // 根據篩選模式顯示店家
       _updateDisplayedMerchants();
@@ -106,7 +129,10 @@ class _SvMapPageState extends State<SvMapPage> {
   }
 
   void _updateMarkers() {
-    _markers = _displayedMerchants.map((merchant) {
+    // 只顯示有效座標的店家標記
+    _markers = _displayedMerchants
+        .where((merchant) => merchant.lat != 0.0 && merchant.lng != 0.0)
+        .map((merchant) {
       return Marker(
         markerId: MarkerId(merchant.id.toString()),
         position: LatLng(merchant.lat, merchant.lng),
