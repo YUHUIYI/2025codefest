@@ -52,7 +52,7 @@ class SvMerchant {
       phone: _parseNullableString(map['phone']),
       description: _parseNullableString(map['description']),
       imageUrl: _parseNullableString(map['image_url'] ?? map['imageUrl']),
-      category: _parseNullableString(map['category']),
+      category: _parseNullableString(map['custom_category']),
       businessHours: _parseNullableString(
         map['businessHours'] ?? map['business_hours'],
       ),
