@@ -17,7 +17,6 @@ import 'package:town_pass/service/geo_locator_service.dart';
 import 'package:town_pass/service/shared_preferences_service.dart';
 import 'package:town_pass/util/tp_app_bar.dart';
 import 'package:town_pass/util/tp_colors.dart';
-import 'package:town_pass/util/tp_text.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
 
 /// 動滋券地圖查詢頁
@@ -36,9 +35,9 @@ class _SvMapPageState extends State<SvMapPage> {
   GoogleMapController? _mapController;
   Position? _userPosition;
   List<SvMerchant> _allMerchants = [];
-  List<SvMerchant> _displayedMerchants = [];
   Set<Marker> _markers = {};
   SvMerchant? _selectedMerchant;
+  SvMerchant? _lastClickedMerchant;
 
   bool _distanceFilterEnabled = false;
   double _distanceThresholdKm = 5.0;
@@ -51,16 +50,7 @@ class _SvMapPageState extends State<SvMapPage> {
   Set<String> _likedMerchantIds = {};
   String _filterMode = 'all'; // 'all', 'affordable', 'liked', 'distance', 'price', 'favorite'
   double _balance = 0;
-  
-  // 用於追蹤點擊狀態（雙擊功能）
-  SvMerchant? _lastTappedMerchant;
-  DateTime? _lastTapTime;
-  
-  // 用於 debounce camera 更新
-  Timer? _cameraUpdateTimer;
-  bool _isCameraMoving = false;
-  CameraPosition? _lastCameraPosition;
-  DateTime? _lastUpdateTime;
+  bool _showDetail = false;
 
   @override
   void initState() {
@@ -74,7 +64,6 @@ class _SvMapPageState extends State<SvMapPage> {
     _locationService = SvLocationService(Get.find<GeoLocatorService>());
     _storageService = SvStorageService(Get.find<SharedPreferencesService>());
     
-    // 載入餘額
     _loadBalance();
     
     // 延遲到 widget 完全初始化後再載入資料
@@ -83,6 +72,12 @@ class _SvMapPageState extends State<SvMapPage> {
     });
   }
 
+  Future<void> _loadBalance() async {
+    final savedBalance = await _storageService.getBalance();
+    if (mounted) {
+      setState(() {
+        _balance = _balance > 0 ? _balance : (savedBalance ?? 0.0);
+      });
   Map<String, double> _calculateMerchantDistances(
     List<SvMerchant> merchants,
     Position userPosition,
@@ -186,6 +181,10 @@ class _SvMapPageState extends State<SvMapPage> {
         return;
       }
       
+      // 更新地圖標記
+      _updateMarkers();
+      
+      // 移動地圖到使用者位置
       final minProductPrices = await _apiService.fetchStoreMinProductPrices();
       final likedIds = await _storageService.getLikes();
       final distances = _userPosition != null
@@ -419,7 +418,7 @@ class _SvMapPageState extends State<SvMapPage> {
 
   void _updateMarkers() {
     // 只顯示有效座標的店家標記
-    _markers = _displayedMerchants
+    _markers = _allMerchants
         .where((merchant) => merchant.lat != 0.0 && merchant.lng != 0.0)
         .map((merchant) {
       return Marker(
@@ -436,13 +435,18 @@ class _SvMapPageState extends State<SvMapPage> {
     setState(() {});
   }
 
-  Future<void> _onFilterChanged(String mode) async {
+  void _onMarkerTapped(SvMerchant merchant) {
     setState(() {
-      _filterMode = mode;
-      _selectedMerchant = null;
+      if (_selectedMerchant?.id == merchant.id && _lastClickedMerchant?.id == merchant.id) {
+        // 再次點擊相同地點，顯示詳細資料
+        _showDetail = true;
+      } else {
+        // 第一次點擊，顯示資訊卡
+        _selectedMerchant = merchant;
+        _lastClickedMerchant = merchant;
+        _showDetail = false;
+      }
     });
-    await _updateDisplayedMerchants();
-    _updateMarkers();
   }
 
   Future<void> _openGoogleMaps(double lat, double lng) async {
@@ -657,48 +661,24 @@ class _SvMapPageState extends State<SvMapPage> {
     }
   }
 
-  /// Camera 移動時的回調（用於標記移動狀態）
-  /// 不進行任何操作，只標記移動狀態，避免頻繁更新
-  void _onCameraMove(CameraPosition position) {
-    _isCameraMoving = true;
-    _lastCameraPosition = position;
-    
-    // 取消之前的 timer，避免累積過多待處理的更新
-    _cameraUpdateTimer?.cancel();
+  Future<void> _openGoogleMaps(SvMerchant merchant) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(merchant.address)}',
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        SvDialogUtil.showErrorDialog(context, '無法開啟 Google Maps');
+      }
+    }
   }
 
-  /// Camera 停止移動時的回調（只在這裡進行實際更新）
-  /// 使用 debounce 和 throttle 機制來減少更新頻率，避免 buffer 過滿和頻繁調用 API
-  void _onCameraIdle() {
-    if (!_isCameraMoving) {
-      return;
-    }
-    
-    // 使用 throttle 機制：如果距離上次更新不到 1 秒，則忽略此次更新
-    final now = DateTime.now();
-    if (_lastUpdateTime != null && 
-        now.difference(_lastUpdateTime!).inMilliseconds < 1000) {
-      _isCameraMoving = false;
-      return;
-    }
-    
-    _isCameraMoving = false;
-    
-    // 使用 debounce 機制，延遲 800ms 後再處理
-    // 增加延遲時間可以進一步減少更新頻率和 Google Maps API 調用
-    _cameraUpdateTimer?.cancel();
-    _cameraUpdateTimer = Timer(const Duration(milliseconds: 800), () {
-      if (!mounted || _lastCameraPosition == null) {
-        return;
-      }
-      
-      // 更新最後更新時間
-      _lastUpdateTime = DateTime.now();
-      
-      // 這裡可以根據需要更新可見區域的標記
-      // 目前不需要額外操作，因為標記已經在初始載入時設定好了
-      // 如果未來需要根據視圖範圍動態載入標記，可以在這裡實現
-      // 但要注意：任何 API 調用都應該在這裡進行，並且要確保不會頻繁調用
+  void _closeInfoCard() {
+    setState(() {
+      _selectedMerchant = null;
+      _lastClickedMerchant = null;
+      _showDetail = false;
     });
   }
 
@@ -709,26 +689,18 @@ class _SvMapPageState extends State<SvMapPage> {
         title: '地圖查詢',
         backgroundColor: TPColors.white,
         actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.menu),
-            onSelected: (value) async {
-              await _onFilterChanged(value);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'distance',
-                child: Text('距離'),
+          if (_balance > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: Text(
+                  SvFormatter.formatCurrency(_balance),
+                  style: TPTextStyles.bodySemiBold.copyWith(
+                    color: TPColors.primary500,
+                  ),
+                ),
               ),
-              const PopupMenuItem(
-                value: 'price',
-                child: Text('價錢'),
-              ),
-              const PopupMenuItem(
-                value: 'favorite',
-                child: Text('收藏'),
-              ),
-            ],
-          ),
+            ),
         ],
       ),
       body: Column(
@@ -758,30 +730,97 @@ class _SvMapPageState extends State<SvMapPage> {
               ],
             ),
           ),
-          // 地圖區域
-          Expanded(
-            child: Stack(
+          // 店家資訊卡
+          if (_selectedMerchant != null)
+            Positioned(
+              bottom: 16,
+              left: 16,
+              right: 16,
+              child: _showDetail
+                  ? _buildDetailCard(_selectedMerchant!)
+                  : _buildInfoCard(_selectedMerchant!),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(SvMerchant merchant) {
+    return FutureBuilder<bool>(
+      future: _storageService.isLiked(merchant.id),
+      builder: (context, snapshot) {
+        final isLiked = snapshot.data ?? false;
+        return Opacity(
+          opacity: 0.8,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: TPColors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: TPColors.grayscale950.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Listener(
-                  onPointerSignal: (event) {
-                    if (event is PointerScrollEvent && _mapController != null) {
-                      final delta = event.scrollDelta.dy;
-                      if (delta < 0) {
-                        // 向上滾動，放大
-                        _mapController!.animateCamera(CameraUpdate.zoomIn());
-                      } else if (delta > 0) {
-                        // 向下滾動，縮小
-                        _mapController!.animateCamera(CameraUpdate.zoomOut());
-                      }
-                    }
-                  },
-                  child: GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: _userPosition != null
-                          ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
-                          : const LatLng(25.0330, 121.5654), // 台北市預設位置
-                      zoom: 13,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        merchant.name,
+                        style: TPTextStyles.h3SemiBold.copyWith(color: TPColors.grayscale950),
+                      ),
                     ),
+                    // 愛心按鈕
+                    IconButton(
+                      icon: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? TPColors.red500 : TPColors.grayscale400,
+                      ),
+                      onPressed: () => _toggleLike(merchant),
+                    ),
+                    // 叉叉按鈕
+                    IconButton(
+                      icon: const Icon(Icons.close, color: TPColors.grayscale950),
+                      onPressed: _closeInfoCard,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (merchant.category != null) ...[
+                  Text(
+                    '類別：${merchant.category}',
+                    style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                InkWell(
+                  onTap: () => _openGoogleMaps(merchant),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          merchant.address,
+                          style: TPTextStyles.bodyRegular.copyWith(
+                            color: TPColors.primary500,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios, size: 12, color: TPColors.primary500),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
+                  style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
                     markers: _markers,
                     myLocationEnabled: true,
                     myLocationButtonEnabled: true,
@@ -893,6 +932,185 @@ class _SvMapPageState extends State<SvMapPage> {
                     right: 16,
                     child: _buildMerchantCard(_selectedMerchant!),
                   ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailCard(SvMerchant merchant) {
+    return FutureBuilder<bool>(
+      future: _storageService.isLiked(merchant.id),
+      builder: (context, snapshot) {
+        final isLiked = snapshot.data ?? false;
+        return Opacity(
+          opacity: 0.8,
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.6,
+            ),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: TPColors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: TPColors.grayscale950.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        merchant.name,
+                        style: TPTextStyles.h2SemiBold.copyWith(color: TPColors.grayscale950),
+                      ),
+                    ),
+                    // 愛心按鈕
+                    IconButton(
+                      icon: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? TPColors.red500 : TPColors.grayscale400,
+                      ),
+                      onPressed: () => _toggleLike(merchant),
+                    ),
+                    // 叉叉按鈕
+                    IconButton(
+                      icon: const Icon(Icons.close, color: TPColors.grayscale950),
+                      onPressed: _closeInfoCard,
+                    ),
+                  ],
+                ),
+                const Divider(),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (merchant.category != null) ...[
+                          _buildDetailRow(
+                            icon: Icons.category,
+                            label: '類別',
+                            value: merchant.category!,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        _buildDetailRow(
+                          icon: Icons.location_on,
+                          label: '地址',
+                          value: merchant.address,
+                          isClickable: true,
+                          onTap: () => _openGoogleMaps(merchant),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDetailRow(
+                          icon: Icons.payment,
+                          label: '最低消費',
+                          value: SvFormatter.formatCurrency(merchant.minSpend),
+                        ),
+                        if (merchant.phone != null) ...[
+                          const SizedBox(height: 16),
+                          _buildDetailRow(
+                            icon: Icons.phone,
+                            label: '營業電話',
+                            value: merchant.phone!,
+                          ),
+                        ],
+                        if (merchant.businessHours != null) ...[
+                          const SizedBox(height: 16),
+                          _buildDetailRow(
+                            icon: Icons.access_time,
+                            label: '營業時間',
+                            value: merchant.businessHours!,
+                          ),
+                        ],
+                        if (merchant.website != null) ...[
+                          const SizedBox(height: 16),
+                          _buildDetailRow(
+                            icon: Icons.language,
+                            label: '官方網址',
+                            value: merchant.website!,
+                            isClickable: true,
+                            onTap: () async {
+                              final uri = Uri.parse(merchant.website!);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            },
+                          ),
+                        ],
+                        if (merchant.description != null) ...[
+                          const SizedBox(height: 16),
+                          Text(
+                            '商家描述',
+                            style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            merchant.description!,
+                            style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    bool isClickable = false,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: isClickable ? onTap : null,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: TPColors.primary500),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: TPTextStyles.bodyRegular.copyWith(
+                          color: isClickable ? TPColors.primary500 : TPColors.grayscale700,
+                          decoration: isClickable ? TextDecoration.underline : null,
+                        ),
+                      ),
+                    ),
+                    if (isClickable)
+                      const Icon(Icons.arrow_forward_ios, size: 12, color: TPColors.primary500),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1035,4 +1253,3 @@ class _SvMapPageState extends State<SvMapPage> {
     );
   }
 }
-
