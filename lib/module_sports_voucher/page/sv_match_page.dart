@@ -497,24 +497,26 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                               ],
                             ),
                           ],
-                          const SizedBox(height: 6),
-                          // 最低消費標籤
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: TPColors.primary500,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
-                              style: TPTextStyles.caption.copyWith(
-                                color: TPColors.white,
-                                fontWeight: FontWeight.w600,
+                          // 最低消費標籤（如果為 0 則不顯示）
+                          if (merchant.minSpend > 0) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: TPColors.primary500,
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              child: Text(
+                                '最低消費 : ${SvFormatter.formatCurrency(merchant.minSpend)}',
+                                style: TPTextStyles.caption.copyWith(
+                                  color: TPColors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
@@ -581,12 +583,14 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                       label: '地址',
                       value: merchant.address,
                     ),
-                    const SizedBox(height: 16),
-                    _buildDetailRow(
-                      icon: Icons.payment,
-                      label: '最低消費',
-                      value: SvFormatter.formatCurrency(merchant.minSpend),
-                    ),
+                    if (merchant.minSpend > 0) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailRow(
+                        icon: Icons.payment,
+                        label: '最低消費',
+                        value: SvFormatter.formatCurrency(merchant.minSpend),
+                      ),
+                    ],
                     if (merchant.businessHours != null) ...[
                       const SizedBox(height: 16),
                       _buildDetailRow(
