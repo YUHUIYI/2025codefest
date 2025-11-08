@@ -1,0 +1,17 @@
+{
+  "name": "dongzi-scraper",
+  "version": "1.0.0",
+  "description": "動滋券店家資料爬蟲服務",
+  "main": "scraper.js",
+  "scripts": {
+    "start": "node scraper.js",
+    "scrape": "node scraper.js"
+  },
+  "keywords": ["scraper", "puppeteer", "dongzi"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^24.15.0",
+    "csv-writer": "^1.6.0"
+  }
+}
