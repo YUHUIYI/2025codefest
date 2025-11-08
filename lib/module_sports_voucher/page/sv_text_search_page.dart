@@ -39,8 +39,18 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     
     _storageService = SvStorageService(Get.find<SharedPreferencesService>());
     
+    _loadBalance();
     _loadData();
     _searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadBalance() async {
+    final savedBalance = await _storageService.getBalance();
+    if (mounted) {
+      setState(() {
+        _balance = _balance ?? savedBalance;
+      });
+    }
   }
 
   @override
@@ -123,6 +133,167 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     setState(() {});
   }
 
+  void _showMerchantDetail(SvMerchant merchant) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: TPColors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // 拖曳指示器
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: TPColors.grayscale300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // 標題列
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      merchant.name,
+                      style: TPTextStyles.h2SemiBold.copyWith(color: TPColors.grayscale950),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _likedIds.contains(merchant.id) ? Icons.favorite : Icons.favorite_border,
+                      color: _likedIds.contains(merchant.id) ? TPColors.red500 : TPColors.grayscale400,
+                    ),
+                    onPressed: () => _toggleLike(merchant),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            // 內容
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 地址
+                    _buildDetailRow(
+                      icon: Icons.location_on,
+                      label: '地址',
+                      value: merchant.address,
+                    ),
+                    const SizedBox(height: 16),
+                    // 最低消費
+                    _buildDetailRow(
+                      icon: Icons.payment,
+                      label: '最低消費',
+                      value: SvFormatter.formatCurrency(merchant.minSpend),
+                    ),
+                    if (merchant.phone != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailRow(
+                        icon: Icons.phone,
+                        label: '電話',
+                        value: merchant.phone!,
+                      ),
+                    ],
+                    if (merchant.businessHours != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailRow(
+                        icon: Icons.access_time,
+                        label: '營業時間',
+                        value: merchant.businessHours!,
+                      ),
+                    ],
+                    if (merchant.category != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailRow(
+                        icon: Icons.category,
+                        label: '分類',
+                        value: merchant.category!,
+                      ),
+                    ],
+                    if (merchant.website != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailRow(
+                        icon: Icons.language,
+                        label: '網站',
+                        value: merchant.website!,
+                      ),
+                    ],
+                    if (merchant.description != null) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        '描述',
+                        style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        merchant.description!,
+                        style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                      ),
+                    ],
+                    if (merchant.updatedAt != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailRow(
+                        icon: Icons.update,
+                        label: '更新時間',
+                        value: SvFormatter.formatDateTime(merchant.updatedAt!),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: TPColors.primary500),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -132,6 +303,31 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
       ),
       body: Column(
         children: [
+          // 餘額提示
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: TPColors.primary50,
+            child: Row(
+              children: [
+                Icon(
+                  _balance != null ? Icons.account_balance_wallet : Icons.warning_amber_rounded,
+                  size: 20,
+                  color: _balance != null ? TPColors.primary500 : TPColors.grayscale600,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _balance != null
+                        ? '💰 目前餘額：${SvFormatter.formatCurrency(_balance!)}'
+                        : '⚠️ 尚未儲存餘額，僅供瀏覽查詢。',
+                    style: TPTextStyles.bodyRegular.copyWith(
+                      color: _balance != null ? TPColors.primary600 : TPColors.grayscale600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           // 搜尋欄
           Container(
             padding: const EdgeInsets.all(16),
@@ -219,7 +415,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
       ),
       child: InkWell(
         onTap: () {
-          // 可以開啟店家詳情頁面
+          _showMerchantDetail(merchant);
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(

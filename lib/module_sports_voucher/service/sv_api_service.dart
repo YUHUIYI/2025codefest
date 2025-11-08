@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
 import 'package:town_pass/config/app_config.dart';
 
@@ -62,8 +65,8 @@ class SvApiService {
 
   /// 根據餘額取得可用店家
   Future<List<SvMerchant>> fetchAffordableMerchants(double balance) async {
-    final allMerchants = await fetchMerchants();
-    return allMerchants.where((merchant) => merchant.isAffordable(balance)).toList();
+    final merchants = await fetchMerchants();
+    return merchants.where((merchant) => merchant.isAffordable(balance)).toList();
   }
 
   /// 根據 ID 取得店家
