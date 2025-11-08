@@ -10,7 +10,7 @@ function delay(ms) {
 
 // CSV 寫入器設定
 const csvWriter = createCsvWriter({
-  path: 'vendors.csv',
+  path: 'vendors_2.csv',
   header: [
     { id: 'name', title: '商家名稱' },
     { id: 'address', title: '地址' },
@@ -422,117 +422,186 @@ async function scrapeVendors() {
 
     const vendors = [];
     
-    console.log('\n開始提取店家列表...');
+    console.log('\n開始從列表頁提取店家資料...');
     
-    // 提取當前頁面的店家列表
-    const vendorLinks = await page.evaluate(() => {
-        const links = [];
+    // 先檢查頁面結構，輸出調試信息
+    const pageStructure = await page.evaluate(() => {
+      const containers = Array.from(document.querySelectorAll('tr, div, li, table'));
+      const withAddress = containers.filter(c => c.textContent.includes('營業地址'));
+      const withTaipei = containers.filter(c => c.textContent.includes('臺北市'));
+      
+      // 取前 3 個包含「營業地址」的容器，輸出其結構
+      const sampleContainers = withAddress.slice(0, 3).map(c => ({
+        tag: c.tagName,
+        className: c.className || '',
+        id: c.id || '',
+        textPreview: c.textContent.substring(0, 200),
+        htmlPreview: c.innerHTML.substring(0, 300),
+      }));
+      
+      return {
+        totalContainers: containers.length,
+        withAddress: withAddress.length,
+        withTaipei: withTaipei.length,
+        sampleContainers: sampleContainers,
+      };
+    });
+    
+    console.log('頁面結構分析:');
+    console.log(`  總容器數: ${pageStructure.totalContainers}`);
+    console.log(`  包含「營業地址」: ${pageStructure.withAddress}`);
+    console.log(`  包含「臺北市」: ${pageStructure.withTaipei}`);
+    console.log('\n前 3 個包含「營業地址」的容器預覽:');
+    pageStructure.sampleContainers.forEach((sample, idx) => {
+      console.log(`\n  [${idx + 1}] ${sample.tag} (class: ${sample.className}, id: ${sample.id})`);
+      console.log(`  文字預覽: ${sample.textPreview.substring(0, 150)}...`);
+    });
+    
+    // 從列表頁提取基本資訊（店名、地址、詳情頁連結）
+    const vendorBasicInfo = await page.evaluate(() => {
+      const vendors = [];
+      const debugInfo = [];
+      
+      // 找到所有包含店家資訊的容器
+      const containers = Array.from(document.querySelectorAll('tr, div, li'));
+      
+      debugInfo.push(`找到 ${containers.length} 個容器`);
+      
+      containers.forEach((container, idx) => {
+        const text = container.textContent || '';
         
-        // 方法1: 尋找包含 seqno 和 productList 的連結（詳情頁連結）
-        const detailLinks = document.querySelectorAll('a[href*="seqno"]');
-        detailLinks.forEach(el => {
-          const href = el.getAttribute('href');
-          // 檢查是否包含 productList（詳情頁連結）
-          if (href && href.includes('seqno') && href.includes('productList')) {
-            // 修復 URL：確保有正確的斜線
-            let fullHref = href;
-            if (!href.startsWith('http')) {
-              // 如果 href 以 / 開頭，直接拼接；否則需要加上 /
+        // 檢查是否包含「營業地址」，表示這是一個店家項目
+        if (!text.includes('營業地址')) {
+          return; // 跳過非店家項目
+        }
+        
+        // 檢查是否包含「臺北市」，確保是台北市的店家
+        if (!text.includes('臺北市')) {
+          return; // 跳過非台北市店家
+        }
+        
+        const data = {
+          name: '',
+          address: '',
+          detailUrl: '', // 詳情頁連結
+        };
+        
+        // 提取商家名稱（通常是第一行，不包含「營業地址」等關鍵字）
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        
+        for (const line of lines) {
+          if (line && 
+              !line.includes('營業地址') && 
+              !line.includes('營業電話') && 
+              !line.includes('營業時間') &&
+              !line.includes('網址') &&
+              !line.includes('地址：') &&
+              !line.includes('電話：') &&
+              !line.includes('時間：') &&
+              !line.includes('列表模式') &&
+              !line.includes('卡片模式') &&
+              line.length < 200 &&
+              line.length > 1) {
+            // 檢查是否包含地址格式（郵遞區號），如果是則跳過
+            if (!/^\d{3}\s*臺北市/.test(line)) {
+              data.name = line;
+              break; // 找到店名就停止
+            }
+          }
+        }
+        
+        // 如果沒找到店名，嘗試從連結文字獲取
+        if (!data.name) {
+          const linkEl = container.querySelector('a[href*="seqno"]');
+          if (linkEl) {
+            const linkText = linkEl.textContent.trim();
+            if (linkText && linkText.length < 200 && !linkText.includes('營業地址')) {
+              data.name = linkText;
+            }
+          }
+        }
+        
+        // 提取營業地址（只提取地址本身，排除「營業地址連結」等文字）
+        const addressMatch = text.match(/營業地址[：:]\s*(\d{3}\s*臺北市[^\n\r]+?)(?:\s*營業地址連結|$)/);
+        if (addressMatch && addressMatch[1]) {
+          // 清理地址，移除多餘的文字
+          let address = addressMatch[1].trim();
+          // 移除「營業地址連結」等字樣
+          address = address.replace(/\s*營業地址連結.*$/, '');
+          address = address.replace(/\s*連結.*$/, '');
+          data.address = address.trim();
+        }
+        
+        // 提取詳情頁連結
+        const detailLink = container.querySelector('a[href*="seqno"][href*="productList"]');
+        if (detailLink) {
+          let href = detailLink.getAttribute('href');
+          if (href) {
+            // 如果是完整的 URL，直接使用
+            if (href.startsWith('http')) {
+              data.detailUrl = href;
+            } else {
+              // 如果是相對路徑，需要構建完整 URL
+              // 正確格式: https://500.gov.tw/FOAS/actions/Vendor114.action?productList&seqno=...
               if (href.startsWith('/')) {
-                fullHref = `https://500.gov.tw${href}`;
+                // 絕對路徑，直接加上域名
+                href = `https://500.gov.tw${href}`;
+              } else if (href.includes('Vendor114.action')) {
+                // 如果已經包含 Vendor114.action，加上完整路徑
+                href = `https://500.gov.tw/FOAS/actions/${href}`;
+              } else if (href.startsWith('?')) {
+                // 如果以 ? 開頭，是查詢參數，構建完整 URL（去掉開頭的 ?）
+                const queryParams = href.substring(1);
+                href = `https://500.gov.tw/FOAS/actions/Vendor114.action?${queryParams}`;
+              } else if (href.includes('productList') && href.includes('seqno')) {
+                // 如果包含查詢參數關鍵字，構建完整 URL
+                href = `https://500.gov.tw/FOAS/actions/Vendor114.action?${href}`;
               } else {
-                fullHref = `https://500.gov.tw/${href}`;
+                // 其他情況，嘗試加上完整路徑
+                href = `https://500.gov.tw/FOAS/actions/${href}`;
               }
-            }
-            
-            // 嘗試從連結文字或父元素獲取店名
-            let name = el.textContent.trim();
-            
-            // 如果連結文字太長或為空，從父元素獲取
-            if (!name || name.length > 100 || name.includes('營業地址')) {
-              const parent = el.closest('tr, div, li, td');
-              if (parent) {
-                const parentText = parent.textContent.trim();
-                // 提取第一行作為店名（排除「營業地址」等）
-                const lines = parentText.split('\n').filter(line => {
-                  const trimmed = line.trim();
-                  return trimmed && 
-                         !trimmed.includes('營業地址') && 
-                         !trimmed.includes('地址') &&
-                         trimmed.length < 100;
-                });
-                if (lines.length > 0) {
-                  name = lines[0].trim();
-                }
-              }
-            }
-            
-            // 如果還是沒有名字，嘗試從整個列表項提取
-            if (!name || name.length > 100) {
-              const listItem = el.closest('tr, div, li');
-              if (listItem) {
-                const allText = listItem.textContent;
-                const match = allText.match(/^([^\n\r]+)/);
-                if (match && match[1]) {
-                  name = match[1].trim();
-                }
-              }
-            }
-            
-            if (name && name.length < 150 && !name.includes('營業地址')) {
-              links.push({ href: fullHref, name: name });
+              data.detailUrl = href;
             }
           }
-        });
-
-        // 方法2: 如果方法1沒找到，嘗試從所有包含 seqno 的連結提取
-        if (links.length === 0) {
-          const allSeqnoLinks = document.querySelectorAll('a[href*="seqno"]');
-          allSeqnoLinks.forEach(el => {
-            const href = el.getAttribute('href');
-            if (href && href.includes('seqno')) {
-              // 修復 URL：確保有正確的斜線
-              let fullHref = href;
-              if (!href.startsWith('http')) {
-                if (href.startsWith('/')) {
-                  fullHref = `https://500.gov.tw${href}`;
-                } else {
-                  fullHref = `https://500.gov.tw/${href}`;
-                }
-              }
-              const parent = el.closest('tr, div, li');
-              if (parent) {
-                const text = parent.textContent.trim();
-                const lines = text.split('\n').filter(line => {
-                  const trimmed = line.trim();
-                  return trimmed && 
-                         !trimmed.includes('營業地址') && 
-                         trimmed.length < 150;
-                });
-                if (lines.length > 0) {
-                  const name = lines[0].trim();
-                  if (name && name.length > 0) {
-                    links.push({ href: fullHref, name: name });
-                  }
-                }
-              }
-            }
-          });
         }
-
-        // 去重並返回
-        const uniqueLinks = [];
-        const seenHrefs = new Set();
-        for (const link of links) {
-          if (!seenHrefs.has(link.href)) {
-            seenHrefs.add(link.href);
-            uniqueLinks.push(link);
-          }
+        
+        // 只添加有店名和地址的資料
+        if (data.name && data.address && data.address.includes('臺北市')) {
+          vendors.push(data);
         }
-        return uniqueLinks;
       });
-
-    console.log(`✓ 找到 ${vendorLinks.length} 個店家`);
+      
+      // 去重：根據店名去重（避免重複）
+      const uniqueVendors = [];
+      const seenNames = new Set();
+      for (const vendor of vendors) {
+        // 清理店名（去除可能的重複）
+        let cleanName = vendor.name;
+        const nameLength = cleanName.length;
+        if (nameLength > 0) {
+          const halfLength = Math.floor(nameLength / 2);
+          const firstHalf = cleanName.substring(0, halfLength);
+          const secondHalf = cleanName.substring(halfLength);
+          if (firstHalf === secondHalf) {
+            cleanName = firstHalf;
+          }
+        }
+        
+        if (!seenNames.has(cleanName)) {
+          seenNames.add(cleanName);
+          vendor.name = cleanName; // 更新為清理後的名稱
+          uniqueVendors.push(vendor);
+        }
+      }
+      
+      return {
+        vendors: uniqueVendors,
+        debugInfo: debugInfo,
+      };
+    });
+    
+    const vendorsList = vendorBasicInfo.vendors || vendorBasicInfo;
+    console.log(`\n✓ 從列表頁提取到 ${vendorsList.length} 個店家基本資訊`);
     
     // 檢查是否有分頁
     const paginationInfo = await page.evaluate(() => {
@@ -549,278 +618,454 @@ async function scrapeVendors() {
     });
     
     if (paginationInfo.hasNext) {
-      console.log(`⚠ 注意: 發現有下一頁，但目前只爬取第一頁的 ${vendorLinks.length} 個店家`);
+      console.log(`⚠ 注意: 發現有下一頁，但目前只爬取第一頁的 ${vendorsList.length} 個店家`);
       console.log(`   如需爬取所有頁面，請告訴我`);
     }
     
-    console.log(`\n開始爬取店家詳細資料...\n`);
-
-    // 逐個進入店家詳情頁提取資料
-    for (let i = 0; i < vendorLinks.length; i++) {
-      const link = vendorLinks[i];
-      const progress = `[${i + 1}/${vendorLinks.length}]`;
-      console.log(`${progress} 正在爬取: "${link.name}"`);
-
+    console.log(`\n開始進入詳情頁提取完整資料...\n`);
+    
+    // 逐個進入詳情頁提取完整資料
+    for (let i = 0; i < vendorsList.length; i++) {
+      const basicInfo = vendorsList[i];
+      const progress = `[${i + 1}/${vendorsList.length}]`;
+      console.log(`${progress} 正在爬取: "${basicInfo.name}"`);
+      
+      // 驗證基本資料
+      if (!basicInfo.name || !basicInfo.address) {
+        console.log(`  ⚠ 跳過資料不完整: ${basicInfo.name || '無店名'}`);
+        continue;
+      }
+      
+      // 確保地址包含臺北市
+      if (!basicInfo.address.includes('臺北市')) {
+        console.log(`  ⚠ 跳過非台北市: ${basicInfo.name}`);
+        continue;
+      }
+      
+      // 額外檢查：確保地址格式正確
+      const addressPattern = /\d{3}\s*臺北市/;
+      if (!addressPattern.test(basicInfo.address)) {
+        console.log(`  ⚠ 地址格式異常: ${basicInfo.name} (${basicInfo.address})`);
+        continue;
+      }
+      
+      // 初始化完整資料（從列表頁獲取的資料）
+      const vendorData = {
+        name: basicInfo.name,
+        address: basicInfo.address,
+        phone: '',
+        businessHours: '',
+        website: '',
+        description: '',
+        category: '',
+      };
+      
+      // 如果有詳情頁連結，進入詳情頁提取其他資訊
+      if (basicInfo.detailUrl) {
+        console.log(`  詳情頁 URL: ${basicInfo.detailUrl}`);
+        // 驗證 URL 格式
+        if (!basicInfo.detailUrl.includes('/FOAS/actions/')) {
+          console.warn(`  ⚠ 警告: URL 可能不正確，缺少 /FOAS/actions/ 路徑`);
+        }
         try {
-          // 開啟新分頁訪問店家詳情
           const detailPage = await browser.newPage();
-          
-          // 確保 URL 格式正確
-          let detailUrl = link.href;
-          if (!detailUrl.startsWith('http')) {
-            if (detailUrl.startsWith('/')) {
-              detailUrl = `https://500.gov.tw${detailUrl}`;
-            } else {
-              detailUrl = `https://500.gov.tw/${detailUrl}`;
-            }
-          }
-          
-          console.log(`  訪問: ${detailUrl.substring(0, 80)}...`);
-          await detailPage.goto(detailUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+          await detailPage.goto(basicInfo.detailUrl, { waitUntil: 'networkidle2', timeout: 30000 });
           await delay(2000);
-
-          // 提取店家詳細資訊
-          const vendorData = await detailPage.evaluate(() => {
-            const data = {
-              name: '',
-              address: '',
-              phone: '',
-              businessHours: '',
-              website: '',
-              description: '',
-              category: '',
+          
+          // 檢查頁面是否載入成功
+          const pageCheck = await detailPage.evaluate(() => {
+            const text = document.body.textContent || '';
+            return {
+              hasError: text.includes('回動滋網') || text.includes('目前領券很踴躍'),
+              hasPhone: text.includes('營業電話'),
+              hasHours: text.includes('營業時間'),
+              hasWebsite: document.querySelectorAll('a[href^="http"]:not([href*="500.gov.tw"])').length > 0,
+              hasDescription: text.length > 500,
+              sampleText: text.substring(0, 300),
             };
-
-            // 檢查是否是錯誤頁面（包含「回動滋網」或「目前領券很踴躍」）
-            const pageText = document.body.textContent || '';
-            if (pageText.includes('回動滋網') || pageText.includes('目前領券很踴躍')) {
-              return data; // 返回空資料，表示這是錯誤頁面
-            }
-
-            // 提取店名 - 根據截圖，店名在詳情頁的標題位置
-            // 先嘗試找包含「店名」標籤的元素
-            const nameLabel = Array.from(document.querySelectorAll('*')).find(el => {
-              const text = el.textContent || '';
-              return text.includes('店名') && text.length < 50;
-            });
-            
-            if (nameLabel) {
-              const nameElement = nameLabel.nextElementSibling || nameLabel.parentElement;
-              if (nameElement && nameElement.textContent.trim()) {
-                data.name = nameElement.textContent.trim();
+          });
+          
+          console.log(`  頁面檢查: 錯誤頁面=${pageCheck.hasError}, 有電話=${pageCheck.hasPhone}, 有時間=${pageCheck.hasHours}, 有網址=${pageCheck.hasWebsite}, 有說明=${pageCheck.hasDescription}`);
+          if (pageCheck.hasError) {
+            console.log(`  ⚠ 這是錯誤頁面，跳過`);
+            await detailPage.close();
+          } else {
+            // 從詳情頁提取：電話、時間、網址、說明、地址（確認地址格式）
+            const detailData = await detailPage.evaluate(() => {
+              const data = {
+                phone: '',
+                businessHours: '',
+                website: '',
+                description: '',
+                category: '',
+                address: '', // 也從詳情頁提取地址，確保格式正確
+              };
+              
+              // 檢查是否是錯誤頁面
+              const pageText = document.body.textContent || '';
+              if (pageText.includes('回動滋網') || pageText.includes('目前領券很踴躍')) {
+                return data; // 返回空資料
               }
-            }
-            
-            // 如果還沒找到，嘗試其他選擇器
-            if (!data.name) {
-              const nameSelectors = [
-                'h1', 'h2', 'h3',
-                '[class*="name"]',
-                '[class*="title"]',
-                '[class*="vendor"]',
-              ];
-              for (const selector of nameSelectors) {
-                try {
-                  const el = document.querySelector(selector);
-                  if (el && el.textContent.trim()) {
-                    const text = el.textContent.trim();
-                    // 排除明顯不是店名的文字
-                    if (text.length > 0 && 
-                        text.length < 150 && 
-                        !text.includes('教育部') && 
-                        !text.includes('體育署') &&
-                        !text.includes('回動滋網') &&
-                        !text.includes('單位簡介')) {
-                      data.name = text;
+              
+              const allElements = Array.from(document.querySelectorAll('*'));
+              
+              // 提取營業地址（從詳情頁確認地址格式）
+              const addressElements = allElements.filter(el => {
+                const text = el.textContent || '';
+                return text.includes('營業地址') && text.includes('臺北市');
+              });
+              
+              if (addressElements.length > 0) {
+                const addressEl = addressElements[0];
+                const addressText = addressEl.textContent || '';
+                // 提取地址，排除「營業地址連結」等文字
+                const addressMatch = addressText.match(/營業地址[：:]\s*(\d{3}\s*臺北市[^\n\r]+?)(?:\s*營業地址連結|$)/);
+                if (addressMatch && addressMatch[1]) {
+                  let address = addressMatch[1].trim();
+                  // 清理地址，移除多餘的文字
+                  address = address.replace(/\s*營業地址連結.*$/, '');
+                  address = address.replace(/\s*連結.*$/, '');
+                  data.address = address.trim();
+                }
+              }
+              
+              // 提取營業電話
+              const phoneElements = allElements.filter(el => {
+                const text = el.textContent || '';
+                return text.includes('營業電話');
+              });
+              
+              if (phoneElements.length > 0) {
+                const phoneEl = phoneElements[0];
+                const phoneText = phoneEl.textContent || '';
+                const match = phoneText.match(/營業電話[：:]\s*([^\n\r]+)/);
+                if (match && match[1]) {
+                  data.phone = match[1].trim();
+                } else {
+                  // 嘗試從下一個兄弟節點獲取
+                  const nextSibling = phoneEl.nextElementSibling;
+                  if (nextSibling) {
+                    const siblingText = nextSibling.textContent.trim();
+                    // 檢查是否是電話格式
+                    if (/^0\d{1,2}[-]?\d+/.test(siblingText) || siblingText.length < 20) {
+                      data.phone = siblingText;
+                    }
+                  }
+                  // 嘗試從父元素的下一個兄弟節點獲取
+                  if (!data.phone) {
+                    const parent = phoneEl.parentElement;
+                    if (parent && parent.nextElementSibling) {
+                      const parentSiblingText = parent.nextElementSibling.textContent.trim();
+                      if (/^0\d{1,2}[-]?\d+/.test(parentSiblingText) || parentSiblingText.length < 20) {
+                        data.phone = parentSiblingText;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              // 提取營業時間
+              const hoursElements = allElements.filter(el => {
+                const text = el.textContent || '';
+                return text.includes('營業時間');
+              });
+              
+              if (hoursElements.length > 0) {
+                const hoursEl = hoursElements[0];
+                const hoursText = hoursEl.textContent || '';
+                const match = hoursText.match(/營業時間[：:]\s*([^\n\r]+)/);
+                if (match && match[1]) {
+                  data.businessHours = match[1].trim();
+                } else {
+                  // 嘗試從下一個兄弟節點獲取
+                  const nextSibling = hoursEl.nextElementSibling;
+                  if (nextSibling) {
+                    const siblingText = nextSibling.textContent.trim();
+                    if (siblingText.length < 100 && (siblingText.includes(':') || siblingText.includes('：'))) {
+                      data.businessHours = siblingText;
+                    }
+                  }
+                  // 嘗試從父元素的下一個兄弟節點獲取
+                  if (!data.businessHours) {
+                    const parent = hoursEl.parentElement;
+                    if (parent && parent.nextElementSibling) {
+                      const parentSiblingText = parent.nextElementSibling.textContent.trim();
+                      if (parentSiblingText.length < 100) {
+                        data.businessHours = parentSiblingText;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              // 提取網址（尋找外部連結）
+              // 方法1: 尋找包含「網址」文字的元素，然後從其附近獲取連結
+              const websiteLabelElements = allElements.filter(el => {
+                const text = el.textContent || '';
+                return text.includes('網址') && (text.includes('網址：') || text.includes('網址:'));
+              });
+              
+              if (websiteLabelElements.length > 0) {
+                const websiteLabelEl = websiteLabelElements[0];
+                // 在同一個元素內尋找連結
+                const linkInLabel = websiteLabelEl.querySelector('a[href^="http"]');
+                if (linkInLabel) {
+                  const href = linkInLabel.getAttribute('href') || '';
+                  if (href && !href.includes('500.gov.tw') && !href.includes('mailto:')) {
+                    data.website = href;
+                  }
+                }
+                // 如果沒找到，嘗試從下一個兄弟節點獲取
+                if (!data.website) {
+                  const nextSibling = websiteLabelEl.nextElementSibling;
+                  if (nextSibling) {
+                    const linkInSibling = nextSibling.querySelector('a[href^="http"]');
+                    if (linkInSibling) {
+                      const href = linkInSibling.getAttribute('href') || '';
+                      if (href && !href.includes('500.gov.tw') && !href.includes('mailto:')) {
+                        data.website = href;
+                      }
+                    }
+                  }
+                }
+                // 如果還是沒找到，嘗試從父元素的下一個兄弟節點獲取
+                if (!data.website) {
+                  const parent = websiteLabelEl.parentElement;
+                  if (parent) {
+                    const linkInParent = parent.querySelector('a[href^="http"]');
+                    if (linkInParent) {
+                      const href = linkInParent.getAttribute('href') || '';
+                      if (href && !href.includes('500.gov.tw') && !href.includes('mailto:')) {
+                        data.website = href;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              // 方法2: 如果方法1沒找到，尋找所有外部連結（排除 500.gov.tw）
+              if (!data.website) {
+                const websiteLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
+                for (const link of websiteLinks) {
+                  const href = link.getAttribute('href') || '';
+                  if (href && !href.includes('500.gov.tw') && !href.includes('mailto:') && !href.includes('facebook.com') && !href.includes('line.me')) {
+                    // 優先選擇看起來像官網的連結（包含常見域名）
+                    if (href.includes('.com') || href.includes('.tw') || href.includes('.org')) {
+                      data.website = href;
                       break;
                     }
                   }
-                } catch (e) {}
-              }
-            }
-
-            // 提取地址 - 尋找包含「營業地址：」的文字
-            const allElements = Array.from(document.querySelectorAll('*'));
-            for (const el of allElements) {
-              const text = el.textContent || '';
-              if (text.includes('營業地址')) {
-                // 嘗試提取地址（格式：營業地址：114 臺北市內湖區文德路108號B1）
-                const match = text.match(/營業地址[：:]\s*([^\n\r]+)/);
-                if (match && match[1]) {
-                  const addr = match[1].trim();
-                  // 確保地址包含臺北市
-                  if (addr.includes('臺北市')) {
-                    data.address = addr;
-                    break;
-                  }
                 }
-                // 如果沒有匹配，嘗試從下一個兄弟節點獲取
-                const nextSibling = el.nextElementSibling;
-                if (nextSibling) {
-                  const addr = nextSibling.textContent.trim();
-                  if (addr && addr.includes('臺北市')) {
-                    data.address = addr;
-                    break;
-                  }
-                }
-                // 嘗試從父元素的下一個兄弟節點獲取
-                const parent = el.parentElement;
-                if (parent && parent.nextElementSibling) {
-                  const addr = parent.nextElementSibling.textContent.trim();
-                  if (addr && addr.includes('臺北市') && addr.length < 200) {
-                    data.address = addr;
-                    break;
+                // 如果還是沒找到，使用第一個外部連結
+                if (!data.website) {
+                  for (const link of websiteLinks) {
+                    const href = link.getAttribute('href') || '';
+                    if (href && !href.includes('500.gov.tw') && !href.includes('mailto:')) {
+                      data.website = href;
+                      break;
+                    }
                   }
                 }
               }
-            }
-
-            // 提取電話 - 尋找包含「營業電話：」的文字
-            for (const el of allElements) {
-              const text = el.textContent || '';
-              if (text.includes('營業電話')) {
-                const match = text.match(/營業電話[：:]\s*([^\n\r]+)/);
-                if (match && match[1]) {
-                  data.phone = match[1].trim();
+              
+              // 提取類別（尋找包含「類別」或「_」的格式，例如「戶外運動類_馬拉松/路跑」）
+              const categoryElements = allElements.filter(el => {
+                const text = el.textContent || '';
+                return text.includes('類別') || (text.includes('_') && (text.includes('類') || text.includes('運動')));
+              });
+              
+              for (const el of categoryElements) {
+                const text = el.textContent || '';
+                // 尋找「類別：」或「類別:」後面的內容
+                const categoryMatch = text.match(/類別[：:]\s*([^\n\r]+)/);
+                if (categoryMatch && categoryMatch[1]) {
+                  data.category = categoryMatch[1].trim();
                   break;
                 }
-                const nextSibling = el.nextElementSibling;
-                if (nextSibling && nextSibling.textContent.trim()) {
-                  data.phone = nextSibling.textContent.trim();
-                  break;
-                }
-              }
-            }
-
-            // 提取營業時間 - 尋找包含「營業時間：」的文字
-            for (const el of allElements) {
-              const text = el.textContent || '';
-              if (text.includes('營業時間')) {
-                const match = text.match(/營業時間[：:]\s*([^\n\r]+)/);
-                if (match && match[1]) {
-                  data.businessHours = match[1].trim();
-                  break;
-                }
-                const nextSibling = el.nextElementSibling;
-                if (nextSibling && nextSibling.textContent.trim()) {
-                  data.businessHours = nextSibling.textContent.trim();
-                  break;
+                // 如果沒有「類別：」，尋找包含「_」的分類格式（例如「戶外運動類_馬拉松/路跑」）
+                if (!data.category && text.includes('_')) {
+                  const underscoreMatch = text.match(/([^_\n\r]+類_[^\n\r]+)/);
+                  if (underscoreMatch && underscoreMatch[1]) {
+                    data.category = underscoreMatch[1].trim();
+                    break;
+                  }
                 }
               }
-            }
-
-            // 提取網址 - 尋找外部連結
-            const websiteLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
-            for (const link of websiteLinks) {
-              const href = link.getAttribute('href') || '';
-              if (href && !href.includes('500.gov.tw') && !href.includes('mailto:')) {
-                data.website = href;
-                break;
-              }
-            }
-
-            // 提取類別 - 尋找包含「類別：」或「運動場館-」的文字
-            for (const el of allElements) {
-              const text = el.textContent || '';
-              if (text.includes('類別') || text.includes('運動場館')) {
-                const categoryMatch = text.match(/類別[：:]\s*([^\n\r]+)|運動場館[-\-]([^\n\r]+)/);
-                if (categoryMatch) {
-                  data.category = (categoryMatch[1] || categoryMatch[2] || '').trim();
-                  break;
+              
+              // 如果還沒找到類別，嘗試從整個頁面文字中尋找
+              if (!data.category) {
+                const pageText = document.body.textContent || '';
+                const categoryInPage = pageText.match(/類別[：:]\s*([^\n\r]+)/);
+                if (categoryInPage && categoryInPage[1]) {
+                  data.category = categoryInPage[1].trim();
+                } else {
+                  // 尋找包含「_」的分類格式
+                  const underscoreMatch = pageText.match(/([^_\n\r]+類_[^\n\r]+)/);
+                  if (underscoreMatch && underscoreMatch[1]) {
+                    data.category = underscoreMatch[1].trim();
+                  }
                 }
               }
-            }
-
-            // 提取描述 - 尋找簡短的描述文字（例如「練一下健身房,分鐘計費,無須綁約」）
-            const descCandidates = Array.from(document.querySelectorAll('p, div, span'));
-            for (const el of descCandidates) {
-              const text = el.textContent.trim();
-              // 描述通常是較短的文字，不包含標籤性的詞彙
-              if (text.length > 10 && text.length < 200 && 
-                  !text.includes('營業') && !text.includes('地址') && 
-                  !text.includes('電話') && !text.includes('時間') &&
-                  !text.includes('類別') && !text.includes('網址')) {
-                // 檢查是否包含逗號或常見的描述性詞彙
-                if (text.includes('，') || text.includes(',') || 
-                    text.includes('計費') || text.includes('綁約') || 
-                    text.includes('健身房') || text.includes('運動')) {
-                  data.description = text;
-                  break;
+              
+              // 提取說明（尋找「簡介：」之後的完整描述）
+              // 方法1: 尋找包含「簡介：」的元素
+              const introElements = allElements.filter(el => {
+                const text = el.textContent || '';
+                return text.includes('簡介：') || text.includes('簡介:');
+              });
+              
+              if (introElements.length > 0) {
+                const introEl = introElements[0];
+                const introText = introEl.textContent || '';
+                // 提取「簡介：」之後的內容
+                const introMatch = introText.match(/簡介[：:]\s*([^\n\r]+(?:\n[^\n\r]+)*)/);
+                if (introMatch && introMatch[1]) {
+                  let description = introMatch[1].trim();
+                  // 清理描述，移除多餘的空白和換行
+                  description = description.replace(/\s+/g, ' ').trim();
+                  // 如果描述太長，可能需要截斷（但先保留完整內容）
+                  if (description.length > 50) {
+                    data.description = description;
+                  }
+                }
+                // 如果沒找到，嘗試從下一個兄弟節點獲取
+                if (!data.description) {
+                  const nextSibling = introEl.nextElementSibling;
+                  if (nextSibling) {
+                    const siblingText = nextSibling.textContent.trim();
+                    if (siblingText.length > 50 && !siblingText.includes('營業地址') && !siblingText.includes('營業電話')) {
+                      data.description = siblingText;
+                    }
+                  }
+                }
+                // 如果還是沒找到，嘗試從父元素獲取
+                if (!data.description) {
+                  const parent = introEl.parentElement;
+                  if (parent) {
+                    const parentText = parent.textContent || '';
+                    const parentMatch = parentText.match(/簡介[：:]\s*([^\n\r]+(?:\n[^\n\r]+)*)/);
+                    if (parentMatch && parentMatch[1]) {
+                      let description = parentMatch[1].trim();
+                      description = description.replace(/\s+/g, ' ').trim();
+                      if (description.length > 50) {
+                        data.description = description;
+                      }
+                    }
+                  }
                 }
               }
+              
+              // 方法2: 如果方法1沒找到，從整個頁面文字中提取「簡介：」之後的內容
+              if (!data.description) {
+                const pageText = document.body.textContent || '';
+                const introMatch = pageText.match(/簡介[：:]\s*([^\n\r]+(?:\n[^\n\r]+)*)/);
+                if (introMatch && introMatch[1]) {
+                  let description = introMatch[1].trim();
+                  // 移除「動滋券適用品項」之後的內容（如果有的話）
+                  description = description.split('動滋券適用品項')[0].trim();
+                  description = description.replace(/\s+/g, ' ').trim();
+                  if (description.length > 50) {
+                    data.description = description;
+                  }
+                }
+              }
+              
+              // 方法3: 如果還是沒找到，尋找較長的描述文字（排除已知欄位）
+              if (!data.description) {
+                const descCandidates = Array.from(document.querySelectorAll('p, div, span'));
+                for (const el of descCandidates) {
+                  const text = el.textContent.trim();
+                  if (text.length > 50 && 
+                      text.length < 2000 && 
+                      !text.includes('營業地址') && 
+                      !text.includes('營業電話') && 
+                      !text.includes('營業時間') &&
+                      !text.includes('網址') &&
+                      !text.includes('類別') &&
+                      !text.includes('單位簡介') &&
+                      !text.includes('簡介：') &&
+                      !text.includes('動滋券適用品項') &&
+                      (text.includes('，') || text.includes(',') || text.includes('。') || text.length > 100)) {
+                    data.description = text;
+                    break;
+                  }
+                }
+              }
+              
+              return data;
+            });
+            
+            // 輸出提取結果
+            console.log(`  提取結果:`);
+            console.log(`    電話: ${detailData.phone || '未找到'}`);
+            console.log(`    時間: ${detailData.businessHours || '未找到'}`);
+            console.log(`    網址: ${detailData.website || '未找到'}`);
+            console.log(`    說明: ${detailData.description ? detailData.description.substring(0, 50) + '...' : '未找到'}`);
+            console.log(`    類別: ${detailData.category || '未找到'}`);
+            
+            // 合併詳情頁資料
+            vendorData.phone = detailData.phone;
+            vendorData.businessHours = detailData.businessHours;
+            vendorData.website = detailData.website;
+            vendorData.description = detailData.description;
+            vendorData.category = detailData.category;
+            // 如果詳情頁有地址且格式正確，使用詳情頁的地址（更準確）
+            if (detailData.address && detailData.address.includes('臺北市')) {
+              vendorData.address = detailData.address;
             }
-
-            return data;
-          });
-
-          // 檢查是否是錯誤頁面
-          if (!vendorData.name || vendorData.name.includes('教育部') || vendorData.name.includes('體育署')) {
-            console.log(`  ⚠ 跳過錯誤頁面或無效資料: ${link.name}`);
+            
             await detailPage.close();
-            await delay(500);
-            continue;
-          }
-
-          // 如果店名為空，使用連結中的名稱（但要去除重複）
-          if (!vendorData.name || vendorData.name.trim() === '') {
-            // 清理連結中的名稱（去除重複）
-            let cleanName = link.name;
-            // 如果名稱重複（例如 "WellSpace 唯爾運動WellSpace 唯爾運動"）
-            const nameLength = cleanName.length;
-            if (nameLength > 0) {
-              const halfLength = Math.floor(nameLength / 2);
-              const firstHalf = cleanName.substring(0, halfLength);
-              const secondHalf = cleanName.substring(halfLength);
-              if (firstHalf === secondHalf) {
-                cleanName = firstHalf;
-              }
-            }
-            vendorData.name = cleanName;
-          }
-
-          // 過濾：只保留台北市的店家（雙重檢查，確保資料正確）
-          if (!vendorData.address || !vendorData.address.includes('臺北市')) {
-            console.log(`  ⚠ 跳過非台北市店家: ${vendorData.name} (${vendorData.address || '無地址'})`);
-            await detailPage.close();
-            await delay(500);
-            continue;
+            await delay(1000); // 避免請求過快
           }
           
-          // 額外檢查：確保地址格式正確（應該包含郵遞區號和「臺北市」）
-          const addressPattern = /\d{3}\s*臺北市/;
-          if (!addressPattern.test(vendorData.address)) {
-            console.log(`  ⚠ 地址格式異常，跳過: ${vendorData.name} (${vendorData.address})`);
-            await detailPage.close();
-            await delay(500);
-            continue;
-          }
-
-          vendors.push(vendorData);
-          console.log(`  ✓ 成功提取: ${vendorData.name}`);
-          if (vendorData.address) console.log(`    地址: ${vendorData.address}`);
-          if (vendorData.phone) console.log(`    電話: ${vendorData.phone}`);
-          if (vendorData.category) console.log(`    類別: ${vendorData.category}`);
-
-          await detailPage.close();
-          await delay(1000); // 避免請求過快
-
         } catch (error) {
-          console.error(`  ✗ 錯誤: ${link.name} - ${error.message}`);
+          console.error(`  ✗ 訪問詳情頁錯誤: ${error.message}`);
+          console.error(`    錯誤詳情: ${error.stack}`);
+          // 即使詳情頁失敗，也保留基本資料
         }
-        
-        // 顯示進度百分比
-        const percentage = Math.round(((i + 1) / vendorLinks.length) * 100);
-        if ((i + 1) % 10 === 0 || i === vendorLinks.length - 1) {
-          console.log(`\n進度: ${percentage}% (${i + 1}/${vendorLinks.length})\n`);
-        }
+      } else {
+        console.log(`  ⚠ 沒有詳情頁連結，跳過提取詳細資料`);
       }
+      
+      vendors.push(vendorData);
+      console.log(`  ✓ 成功: ${vendorData.name}`);
+      if (vendorData.address) console.log(`    地址: ${vendorData.address}`);
+      if (vendorData.phone) console.log(`    電話: ${vendorData.phone}`);
+      if (vendorData.businessHours) console.log(`    時間: ${vendorData.businessHours}`);
+      if (vendorData.website) console.log(`    網址: ${vendorData.website}`);
+      if (vendorData.description) console.log(`    說明: ${vendorData.description.substring(0, 50)}...`);
+      
+      // 每 10 筆顯示進度
+      if ((i + 1) % 10 === 0 || i === vendorsList.length - 1) {
+        const percentage = Math.round(((i + 1) / vendorsList.length) * 100);
+        console.log(`\n進度: ${percentage}% (${i + 1}/${vendorsList.length})\n`);
+      }
+    }
 
     console.log(`\n總共爬取 ${vendors.length} 個店家`);
     console.log('正在寫入 CSV 檔案...');
 
     // 寫入 CSV
     await csvWriter.writeRecords(vendors);
-    console.log('✓ CSV 檔案已生成: vendors.csv');
+    console.log(`\n✓ CSV 檔案已生成: vendors_2.csv`);
+    console.log(`總共寫入 ${vendors.length} 筆資料`);
+    
+    // 統計資料完整性
+    const stats = {
+      total: vendors.length,
+      withPhone: vendors.filter(v => v.phone).length,
+      withHours: vendors.filter(v => v.businessHours).length,
+      withWebsite: vendors.filter(v => v.website).length,
+      withDescription: vendors.filter(v => v.description).length,
+      withCategory: vendors.filter(v => v.category).length,
+    };
+    console.log('\n資料完整性統計:');
+    console.log(`  總數: ${stats.total}`);
+    console.log(`  有電話: ${stats.withPhone} (${Math.round(stats.withPhone/stats.total*100)}%)`);
+    console.log(`  有時間: ${stats.withHours} (${Math.round(stats.withHours/stats.total*100)}%)`);
+    console.log(`  有網址: ${stats.withWebsite} (${Math.round(stats.withWebsite/stats.total*100)}%)`);
+    console.log(`  有說明: ${stats.withDescription} (${Math.round(stats.withDescription/stats.total*100)}%)`);
+    console.log(`  有類別: ${stats.withCategory} (${Math.round(stats.withCategory/stats.total*100)}%)`);
 
   } catch (error) {
     console.error('爬蟲執行錯誤:', error);
