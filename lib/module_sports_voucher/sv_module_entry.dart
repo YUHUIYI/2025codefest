@@ -7,7 +7,7 @@ import 'package:town_pass/module_sports_voucher/page/sv_text_search_page.dart';
 import 'package:town_pass/module_sports_voucher/util/sv_navigator_util.dart';
 import 'package:town_pass/util/tp_colors.dart';
 
-/// 動茲券模組入口
+/// 動滋券模組入口
 /// 提供給台北通主程式載入使用
 class SportsVoucherModule extends StatelessWidget {
   final double? initialBalance;
@@ -17,7 +17,7 @@ class SportsVoucherModule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: '台北通動茲券模組',
+      title: '台北通動滋券模組',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

@@ -11,7 +11,7 @@ import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/tp_text.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
 
-/// 動茲券配對頁（Tinder 式滑動介面）
+/// 動滋券配對頁（Tinder 式滑動介面）
 class SvMatchPage extends StatefulWidget {
   const SvMatchPage({super.key});
 
@@ -59,7 +59,7 @@ class _SvMatchPageState extends State<SvMatchPage> {
         if (mounted) {
           SvDialogUtil.showErrorDialog(
             context,
-            '沒有找到可用動茲券消費的店家',
+            '沒有找到可用動滋券消費的店家',
           );
         }
       }
@@ -147,7 +147,7 @@ class _SvMatchPageState extends State<SvMatchPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '沒有找到可用動茲券消費的店家',
+                '沒有找到可用動滋券消費的店家',
                 style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale500),
               ),
               const SizedBox(height: 16),

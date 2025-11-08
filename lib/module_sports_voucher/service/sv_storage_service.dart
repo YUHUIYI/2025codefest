@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:town_pass/service/shared_preferences_service.dart';
 
-/// 動茲券本地儲存服務
+/// 動滋券本地儲存服務
 /// 管理使用者的 Like 清單
 class SvStorageService {
   static const String _keyLikes = 'sv_likes';

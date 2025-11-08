@@ -2,7 +2,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
 import 'package:town_pass/service/geo_locator_service.dart';
 
-/// 動茲券定位服務
+/// 動滋券定位服務
 class SvLocationService {
   final GeoLocatorService _geoLocatorService;
 
