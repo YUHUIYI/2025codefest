@@ -1,3 +1,4 @@
+import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,6 +30,11 @@ class _SvHomePageState extends State<SvHomePage> {
   final FocusNode _balanceFocusNode = FocusNode();
   late final SvStorageService _storageService;
   double? _savedBalance;
+  final List<String> _bannerImages = const [
+    'assets/image/sv_banner.png',
+    'assets/image/sv_banner_2.png',
+  ];
+  int _currentBannerIndex = 0;
 
   @override
   void initState() {
@@ -242,28 +248,64 @@ class _SvHomePageState extends State<SvHomePage> {
   }
 
   Widget _buildBanner() {
-    return Container(
-      width: double.infinity,
-      height: 180,
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Image.asset(
-        'assets/image/sv_banner.png',
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          // 如果圖片不存在，顯示佔位符
-          return Container(
-            color: TPColors.primary100,
-            child: Center(
-              child: Text(
-                'Banner 圖片',
-                style: TPTextStyles.bodyRegular.copyWith(
-                  color: TPColors.grayscale600,
-                ),
+    return Column(
+      children: [
+        CarouselSlider(
+          options: CarouselOptions(
+            height: 180,
+            viewportFraction: 1.0,
+            autoPlay: true,
+            autoPlayInterval: const Duration(seconds: 5),
+            onPageChanged: (index, reason) {
+              setState(() {
+                _currentBannerIndex = index;
+              });
+            },
+          ),
+          items: _bannerImages.map((imagePath) {
+            return Builder(
+              builder: (context) {
+                return Container(
+                  width: double.infinity,
+                  color: TPColors.primary100,
+                  child: Image.asset(
+                    imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Center(
+                        child: Text(
+                          'Banner 圖片',
+                          style: TPTextStyles.bodyRegular.copyWith(
+                            color: TPColors.grayscale600,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(_bannerImages.length, (index) {
+            final isActive = index == _currentBannerIndex;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: isActive ? 20 : 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: isActive ? TPColors.primary500 : TPColors.grayscale300,
+                borderRadius: BorderRadius.circular(4),
               ),
-            ),
-          );
-        },
-      ),
+            );
+          }),
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 
