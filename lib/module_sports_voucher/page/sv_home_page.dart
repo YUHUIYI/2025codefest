@@ -102,6 +102,35 @@ class _SvHomePageState extends State<SvHomePage> {
     }
   }
 
+  Future<void> _clearAllData() async {
+    final confirmed = await SvDialogUtil.showConfirmDialog(
+      context,
+      '確定要清除所有資料嗎？\n這將清除餘額、Like 清單和推薦權重。',
+      title: '清除資料',
+      confirmText: '清除',
+      cancelText: '取消',
+    );
+
+    if (confirmed && mounted) {
+      await _storageService.clearAllData();
+      setState(() {
+        _savedBalance = null;
+        _balanceController.clear();
+      });
+
+      if (mounted) {
+        Get.snackbar(
+          '成功',
+          '所有資料已清除',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: TPColors.primary500,
+          colorText: TPColors.white,
+          duration: const Duration(seconds: 2),
+        );
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +227,12 @@ class _SvHomePageState extends State<SvHomePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: _buildOfficialWebsiteCard(),
+            ),
+            const SizedBox(height: 12),
+            // 清除資料按鈕
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: _buildClearDataCard(),
             ),
             const SizedBox(height: 32),
           ],
@@ -485,6 +520,80 @@ class _SvHomePageState extends State<SvHomePage> {
                   const SizedBox(height: 4),
                   Text(
                     '查詢餘額及了解相關資訊',
+                    style: TPTextStyles.caption.copyWith(
+                      color: TPColors.grayscale700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: TPColors.grayscale400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClearDataCard() {
+    return GestureDetector(
+      onTap: _clearAllData,
+      child: Container(
+        decoration: BoxDecoration(
+          color: TPColors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: TPColors.grayscale200,
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: TPColors.grayscale100,
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: TPColors.grayscale100,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: TPColors.grayscale200,
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.refresh,
+                  size: 24,
+                  color: TPColors.grayscale600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '清除所有資料',
+                    style: TPTextStyles.h3SemiBold.copyWith(
+                      color: TPColors.grayscale900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '重置餘額、Like 清單和推薦權重',
                     style: TPTextStyles.caption.copyWith(
                       color: TPColors.grayscale700,
                     ),
