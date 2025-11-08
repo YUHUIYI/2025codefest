@@ -372,19 +372,29 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 圖片區域（模擬）
-              Container(
-                height: 300,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  color: TPColors.primary200,
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.store,
-                    size: 80,
-                    color: TPColors.primary600,
-                  ),
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                child: SizedBox(
+                  height: 300,
+                  width: double.infinity,
+                  child: (merchant.imageUrl != null && merchant.imageUrl!.isNotEmpty)
+                      ? Image.network(
+                          merchant.imageUrl!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+                            return Container(
+                              color: TPColors.primary100,
+                              child: const Center(child: CircularProgressIndicator()),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildImagePlaceholder();
+                          },
+                        )
+                      : _buildImagePlaceholder(),
                 ),
               ),
               // 資訊區域
@@ -624,6 +634,19 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: TPColors.primary200,
+      child: Center(
+        child: Icon(
+          Icons.store,
+          size: 80,
+          color: TPColors.primary600,
+        ),
+      ),
     );
   }
 
