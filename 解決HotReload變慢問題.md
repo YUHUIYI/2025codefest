@@ -64,18 +64,40 @@ I/HWUI: Davey! duration=1003ms
 - ✅ 添加了 `cacheWidth` 和 `cacheHeight` 限制
 - ✅ 減少記憶體使用，提升載入速度
 
-### ✅ 方案 4：使用真實設備測試
+### ✅ 方案 4：使用 iOS 模擬器（推薦）
 
-在真實的 Android 設備上通常不會出現這些問題，Hot Reload 會更快。
+**使用 iOS 模擬器時，Hot Reload 通常不會有問題！**
+
+- ✅ iOS 模擬器沒有 OpenGL ES 錯誤日誌問題
+- ✅ Hot Reload 速度更快、更穩定
+- ✅ 不需要額外的過濾腳本或設定調整
+- ✅ 適合日常開發使用
+
+**切換到 iOS 模擬器：**
+```bash
+# 查看可用的設備
+flutter devices
+
+# 選擇 iOS 模擬器運行
+flutter run -d <iOS模擬器ID>
+```
+
+### ✅ 方案 5：使用真實設備測試
+
+在真實的 Android 或 iOS 設備上通常不會出現這些問題，Hot Reload 會更快。
 
 ## 快速改善步驟
 
-1. **立即執行**：使用過濾腳本運行應用
-   ```bash
-   ./run_without_opengl_errors.sh
-   ```
+1. **最簡單的方法**：使用 iOS 模擬器（推薦）
+   - iOS 模擬器通常不會有 Hot Reload 問題
+   - 無需額外設定，直接使用即可
 
-2. **長期解決**：調整模擬器 Graphics 設定為 Hardware - GLES 2.0
+2. **如果必須使用 Android 模擬器**：
+   - **立即執行**：使用過濾腳本運行應用
+     ```bash
+     ./run_without_opengl_errors.sh
+     ```
+   - **長期解決**：調整模擬器 Graphics 設定為 Hardware - GLES 2.0
 
 3. **如果還是慢**：考慮使用真實設備測試
 
@@ -88,7 +110,8 @@ I/HWUI: Davey! duration=1003ms
 ## 注意事項
 
 - ⚠️ OpenGL 錯誤**不會影響應用功能**，只是警告訊息
-- ⚠️ 這是模擬器的限制，不是程式碼問題
+- ⚠️ 這是 Android 模擬器的限制，不是程式碼問題
+- ✅ **使用 iOS 模擬器可以避免這些問題**
 - ✅ 如果應用能正常運行，可以忽略這些警告
-- ✅ 使用過濾腳本是最簡單快速的解決方案
+- ✅ 使用過濾腳本或切換到 iOS 模擬器是最簡單快速的解決方案
 
