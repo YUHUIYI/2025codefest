@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
+import 'package:town_pass/module_sports_voucher/bean/sv_product.dart';
 import 'package:town_pass/config/app_config.dart';
 
 /// 動滋券 API 服務
@@ -61,6 +62,53 @@ class SvApiService {
       // 如果 API 失敗，返回空列表
       return [];
     }
+  }
+
+  /// 取得所有商品
+  Future<List<SvProduct>> fetchProducts() async {
+    try {
+      final response = await _client.get(
+        _buildUri('/products'),
+        headers: {'Accept': 'application/json'},
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('取得商品資料失敗：HTTP ${response.statusCode}');
+      }
+
+      final decoded = json.decode(response.body) as Map<String, dynamic>;
+      final data = decoded['data'] as List<dynamic>?;
+
+      if (data == null || data.isEmpty) {
+        return [];
+      }
+
+      return data.map((item) {
+        final product = item as Map<String, dynamic>;
+        return SvProduct.fromMap(product);
+      }).toList();
+    } catch (e) {
+      print('取得商品資料失敗：$e');
+      return [];
+    }
+  }
+
+  /// 取得店家對應的最低商品價格
+  Future<Map<String, double>> fetchStoreMinProductPrices() async {
+    final products = await fetchProducts();
+    final Map<String, double> minPrices = {};
+
+    for (final product in products) {
+      if (product.storeId.isEmpty) {
+        continue;
+      }
+      final currentMin = minPrices[product.storeId];
+      if (currentMin == null || product.price < currentMin) {
+        minPrices[product.storeId] = product.price;
+      }
+    }
+
+    return minPrices;
   }
 
   /// 根據餘額取得可用店家
