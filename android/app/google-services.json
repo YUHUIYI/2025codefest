@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "61327312749",
+    "project_id": "dongzhi-taipei",
+    "storage_bucket": "dongzhi-taipei.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:61327312749:android:ee38dbfbc9b59f09c1bc64",
+        "android_client_info": {
+          "package_name": "com.example.townpass"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzk1_E_DBJ68b6f2RW-eRAfxqx6QQ0oRg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
