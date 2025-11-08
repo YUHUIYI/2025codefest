@@ -7,11 +7,16 @@
     "start": "node scraper.js",
     "scrape": "node scraper.js"
   },
-  "keywords": ["scraper", "puppeteer", "dongzi"],
+  "keywords": [
+    "scraper",
+    "puppeteer",
+    "dongzi"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "puppeteer": "^24.15.0",
-    "csv-writer": "^1.6.0"
+    "csv-parse": "^6.1.0",
+    "csv-writer": "^1.6.0",
+    "puppeteer": "^24.15.0"
   }
 }

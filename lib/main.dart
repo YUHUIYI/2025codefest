@@ -8,11 +8,16 @@ import 'package:town_pass/service/account_service.dart';
 import 'package:town_pass/service/device_service.dart';
 import 'package:town_pass/service/geo_locator_service.dart';
 import 'package:town_pass/service/notification_service.dart';
+import 'package:town_pass/service/firebase_test_service.dart';
 import 'package:town_pass/service/package_service.dart';
 import 'package:town_pass/service/shared_preferences_service.dart';
 import 'package:town_pass/service/subscription_service.dart';
 import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/tp_route.dart';
+
+// ✅ 新增：匯入 Firebase 所需套件
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 const _transparentStatusBar = SystemUiOverlayStyle(
   statusBarColor: Colors.transparent,
@@ -20,9 +25,6 @@ const _transparentStatusBar = SystemUiOverlayStyle(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // FlutterNativeSplash.preserve(
-  //   widgetsBinding: WidgetsFlutterBinding.ensureInitialized(),
-  // );
 
   // 載入環境變數
   await AppConfig.load();
@@ -30,6 +32,12 @@ void main() async {
   // 初始化 Google Maps API Key
   await GoogleMapsConfig.initialize();
 
+  // ✅ 初始化 Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // ✅ 初始化原有服務
   await initServices();
 
   SystemChrome.setSystemUIOverlayStyle(_transparentStatusBar);
@@ -44,6 +52,7 @@ Future<void> initServices() async {
   await Get.putAsync<SharedPreferencesService>(() async => await SharedPreferencesService().init());
   await Get.putAsync<GeoLocatorService>(() async => await GeoLocatorService().init());
   await Get.putAsync<NotificationService>(() async => await NotificationService().init());
+  await Get.putAsync<FirebaseTestService>(() async => await FirebaseTestService().init());
 
   Get.put<SubscriptionService>(SubscriptionService());
 }

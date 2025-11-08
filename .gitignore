@@ -94,3 +94,6 @@ app.*.map.json
 .env
 *.env
 !.env.example
+
+# Exclude TownPass directory (official repository clone)
+TownPass/
