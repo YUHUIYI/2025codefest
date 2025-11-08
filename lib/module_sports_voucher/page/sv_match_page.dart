@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
 import 'package:town_pass/module_sports_voucher/service/sv_api_service.dart';
 import 'package:town_pass/module_sports_voucher/service/sv_location_service.dart';
@@ -284,7 +285,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                   if (nextMerchant != null)
                     Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
                         child: _buildCard(nextMerchant, isNext: true),
                       ),
                     ),
@@ -297,7 +298,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                         onPanUpdate: _onPanUpdate,
                         onPanEnd: _onPanEnd,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
                           child: Transform.translate(
                             offset: Offset(_isSwiping ? (_dragPosition > 0 ? 1000 : -1000) : _dragPosition, 0),
                             child: Transform.rotate(
@@ -314,7 +315,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                   ),
                   // 操作按鈕
                   Positioned(
-                    bottom: 20,
+                    bottom: 50,
                     left: 0,
                     right: 0,
                     child: Row(
@@ -368,10 +369,12 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
         child: LayoutBuilder(
           builder: (context, constraints) {
             final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 0;
-            final rawImageHeight = availableHeight > 0 ? availableHeight * 0.55 : 280.0;
-            final imageHeight = rawImageHeight.clamp(200.0, 320.0).toDouble();
+            // 圖片高度比例設為 55%，稍微調短一點
+            final rawImageHeight = availableHeight > 0 ? availableHeight * 0.55 : 300.0;
+            final imageHeight = rawImageHeight.clamp(240.0, 360.0).toDouble();
 
             return Container(
+              height: constraints.maxHeight * 0.92,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
                 gradient: LinearGradient(
@@ -396,8 +399,8 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                           ? Image.network(
                               merchant.imageUrl!,
                               fit: BoxFit.cover,
-                              cacheWidth: 800, // 限制快取寬度，減少記憶體使用
-                              cacheHeight: 640, // 限制快取高度
+                              cacheWidth: 800,
+                              cacheHeight: 760, // 調整快取高度以匹配新的圖片高度（60%）
                               loadingBuilder: (context, child, loadingProgress) {
                                 if (loadingProgress == null) {
                                   return child;
@@ -414,15 +417,15 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                           : _buildImagePlaceholder(),
                     ),
                   ),
-                  // 資訊區域（不足高度時可滾動）
+                  // 資訊區域（使用 Expanded 以填充剩餘空間）
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16), // 減少頂部 padding 從 24 到 20
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 店名 - 使用 H1 字體（36px semibold）粗體
+                          // 店名 - 保持 H1 字體，單行顯示，超過用省略號
                           Text(
                             merchant.name,
                             style: TPTextStyles.h1SemiBold.copyWith(color: TPColors.grayscale950),
@@ -431,7 +434,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                           ),
                           // 類別標籤
                           if (merchant.category != null && merchant.category!.isNotEmpty) ...[
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8), // 從 6 增加到 8
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
@@ -449,32 +452,38 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                               ),
                             ),
                           ],
-                          const SizedBox(height: 6),
-                          // 地址 - 字體放大
+                          const SizedBox(height: 8), // 從 6 增加到 8
+                          // 地址
                           Row(
                             children: [
-                              Icon(Icons.location_on, size: 16, color: TPColors.grayscale600),
+                              Icon(Icons.location_on, size: 18, color: TPColors.grayscale600), // 從 16 增加到 18
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
                                   merchant.address,
-                                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
-                                  maxLines: 1,
+                                  style: TPTextStyles.bodyRegular.copyWith(
+                                    color: TPColors.grayscale700,
+                                    fontSize: 15, // 明確指定字體大小
+                                  ),
+                                  maxLines: 2, // 從 1 增加到 2
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
                           if (merchant.businessHours != null) ...[
-                            const SizedBox(height: 5),
+                            const SizedBox(height: 6), // 從 5 增加到 6
                             Row(
                               children: [
-                                Icon(Icons.access_time, size: 16, color: TPColors.grayscale600),
+                                Icon(Icons.access_time, size: 18, color: TPColors.grayscale600), // 從 16 增加到 18
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     merchant.businessHours!,
-                                    style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                                    style: TPTextStyles.bodyRegular.copyWith(
+                                      color: TPColors.grayscale700,
+                                      fontSize: 15,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -483,14 +492,17 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                             ),
                           ],
                           if (distance != null) ...[
-                            const SizedBox(height: 5),
+                            const SizedBox(height: 6), // 從 5 增加到 6
                             Row(
                               children: [
-                                Icon(Icons.straighten, size: 16, color: TPColors.grayscale600),
+                                Icon(Icons.straighten, size: 18, color: TPColors.grayscale600), // 從 16 增加到 18
                                 const SizedBox(width: 4),
                                 Text(
                                   SvFormatter.formatDistance(distance),
-                                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                                  style: TPTextStyles.bodyRegular.copyWith(
+                                    color: TPColors.grayscale700,
+                                    fontSize: 15,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -499,7 +511,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                           ],
                           // 最低消費標籤（如果為 0 則不顯示）
                           if (merchant.minSpend > 0) ...[
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8), // 從 6 增加到 8
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                               decoration: BoxDecoration(
@@ -582,6 +594,9 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                       icon: Icons.location_on,
                       label: '地址',
                       value: merchant.address,
+                      onTap: merchant.name.isNotEmpty
+                          ? () => _launchGoogleMaps(merchant.name)
+                          : null,
                     ),
                     if (merchant.minSpend > 0) ...[
                       const SizedBox(height: 16),
@@ -636,6 +651,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                         icon: Icons.language,
                         label: '網站',
                         value: merchant.website!,
+                        onTap: () => _launchWebsite(merchant.website!),
                       ),
                     ],
                     if (merchant.description != null) ...[
@@ -664,8 +680,9 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
     required IconData icon,
     required String label,
     required String value,
+    VoidCallback? onTap,
   }) {
-    return Row(
+    final content = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 20, color: TPColors.primary500),
@@ -681,13 +698,54 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
               const SizedBox(height: 4),
               Text(
                 value,
-                style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                style: TPTextStyles.bodyRegular.copyWith(
+                  color: onTap != null ? TPColors.primary500 : TPColors.grayscale700,
+                  decoration: onTap != null ? TextDecoration.underline : null,
+                ),
               ),
             ],
           ),
         ),
       ],
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        child: content,
+      );
+    }
+    return content;
+  }
+
+  Future<void> _launchGoogleMaps(String query) async {
+    final encodedQuery = Uri.encodeComponent(query);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedQuery');
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        SvDialogUtil.showErrorDialog(context, '無法開啟 Google Maps');
+      }
+    }
+  }
+
+  Future<void> _launchWebsite(String url) async {
+    // 確保 URL 有協議前綴
+    String finalUrl = url;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      finalUrl = 'https://$url';
+    }
+
+    final uri = Uri.parse(finalUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        SvDialogUtil.showErrorDialog(context, '無法開啟網站');
+      }
+    }
   }
 
   Widget _buildImagePlaceholder() {

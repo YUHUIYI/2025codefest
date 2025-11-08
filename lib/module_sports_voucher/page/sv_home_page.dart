@@ -143,7 +143,7 @@ class _SvHomePageState extends State<SvHomePage> {
     print('[DEBUG] SvHomePage.build called');
     return Scaffold(
       backgroundColor: TPColors.primary50,
-      appBar: TPAppBar(
+      appBar: const TPAppBar(
         title: '動滋券查詢',
         backgroundColor: TPColors.white,
       ),
@@ -313,7 +313,7 @@ class _SvHomePageState extends State<SvHomePage> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
@@ -458,11 +458,11 @@ class _SvHomePageState extends State<SvHomePage> {
               color: TPColors.grayscale100,
               width: 1,
             ),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
                 color: TPColors.grayscale100,
                 blurRadius: 8,
-                offset: const Offset(0, 2),
+                offset: Offset(0, 2),
                 spreadRadius: 0,
               ),
             ],
@@ -514,11 +514,11 @@ class _SvHomePageState extends State<SvHomePage> {
             color: TPColors.grayscale100,
             width: 1,
           ),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: TPColors.grayscale100,
               blurRadius: 8,
-              offset: const Offset(0, 2),
+              offset: Offset(0, 2),
               spreadRadius: 0,
             ),
           ],
@@ -569,7 +569,7 @@ class _SvHomePageState extends State<SvHomePage> {
                 ],
               ),
             ),
-            Icon(
+            const Icon(
               Icons.arrow_forward_ios,
               size: 16,
               color: TPColors.grayscale400,
@@ -591,11 +591,11 @@ class _SvHomePageState extends State<SvHomePage> {
             color: TPColors.grayscale200,
             width: 1,
           ),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
               color: TPColors.grayscale100,
               blurRadius: 8,
-              offset: const Offset(0, 2),
+              offset: Offset(0, 2),
               spreadRadius: 0,
             ),
           ],
@@ -614,7 +614,7 @@ class _SvHomePageState extends State<SvHomePage> {
                   width: 1,
                 ),
               ),
-              child: Center(
+              child: const Center(
                 child: Icon(
                   Icons.refresh,
                   size: 24,
@@ -643,7 +643,7 @@ class _SvHomePageState extends State<SvHomePage> {
                 ],
               ),
             ),
-            Icon(
+            const Icon(
               Icons.arrow_forward_ios,
               size: 16,
               color: TPColors.grayscale400,

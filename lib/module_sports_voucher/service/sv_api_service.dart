@@ -54,6 +54,7 @@ class SvApiService {
           phone: store['phone'] as String?,
           description: store['description'] as String?,
           imageUrl: store['image_url'] as String?,
+          category: store['custom_category'] as String? ?? store['official_category_auto'] as String?,
         );
       }).toList();
     } catch (e) {
@@ -146,6 +147,7 @@ class SvApiService {
         phone: store['phone'] as String?,
         description: store['description'] as String?,
         imageUrl: store['image_url'] as String?,
+        category: store['custom_category'] as String? ?? store['official_category_auto'] as String?,
       );
     } catch (e) {
       print('取得店家資料失敗：$e');
