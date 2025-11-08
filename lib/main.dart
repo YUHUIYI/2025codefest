@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:town_pass/config/app_config.dart';
+import 'package:town_pass/config/google_maps_config.dart';
 import 'package:town_pass/gen/assets.gen.dart';
 import 'package:town_pass/service/account_service.dart';
 import 'package:town_pass/service/device_service.dart';
@@ -21,6 +23,12 @@ void main() async {
   // FlutterNativeSplash.preserve(
   //   widgetsBinding: WidgetsFlutterBinding.ensureInitialized(),
   // );
+
+  // 載入環境變數
+  await AppConfig.load();
+  
+  // 初始化 Google Maps API Key
+  await GoogleMapsConfig.initialize();
 
   await initServices();
 

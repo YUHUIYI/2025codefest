@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // stores 集合規則
+    match /stores/{storeId} {
+      // 允許讀取所有有效店家
+      allow read: if request.resource.data.is_active == true || resource.data.is_active == true;
+      
+      // 只允許後端（透過 Admin SDK）寫入
+      allow write: if false;
+    }
+  }
+}
+
