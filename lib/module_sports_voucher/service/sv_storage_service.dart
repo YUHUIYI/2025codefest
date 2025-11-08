@@ -6,6 +6,7 @@ import 'package:town_pass/service/shared_preferences_service.dart';
 class SvStorageService {
   static const String _keyLikes = 'sv_likes';
   static const String _keyBalance = 'sv_balance';
+  static const String _keyCategoryWeights = 'sv_category_weights';
   final SharedPreferencesService _sharedPreferencesService;
 
   SvStorageService(this._sharedPreferencesService);
@@ -70,6 +71,65 @@ class SvStorageService {
   /// 清除餘額
   Future<void> clearBalance() async {
     await _sharedPreferencesService.instance.remove(_keyBalance);
+  }
+
+  /// 取得類別權重
+  Future<Map<String, int>> getCategoryWeights() async {
+    final jsonString = _sharedPreferencesService.instance.getString(_keyCategoryWeights);
+    if (jsonString == null) {
+      return {};
+    }
+    try {
+      final Map<String, dynamic> jsonMap = json.decode(jsonString) as Map<String, dynamic>;
+      return jsonMap.map((key, value) => MapEntry(key, (value as num).toInt()));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  /// 儲存類別權重
+  Future<void> saveCategoryWeights(Map<String, int> weights) async {
+    final jsonString = json.encode(weights);
+    await _sharedPreferencesService.instance.setString(_keyCategoryWeights, jsonString);
+  }
+
+  /// 增加類別權重（Like時調用）
+  Future<void> incrementCategoryWeight(String category) async {
+    if (category.isEmpty) return;
+    
+    final weights = await getCategoryWeights();
+    final currentWeight = weights[category] ?? 1;
+    weights[category] = currentWeight + 1;
+    await saveCategoryWeights(weights);
+  }
+
+  /// 初始化所有類別權重為1
+  Future<void> initializeCategoryWeights(List<String> categories) async {
+    final weights = await getCategoryWeights();
+    bool needsUpdate = false;
+    
+    for (final category in categories) {
+      if (category.isNotEmpty && !weights.containsKey(category)) {
+        weights[category] = 1;
+        needsUpdate = true;
+      }
+    }
+    
+    if (needsUpdate) {
+      await saveCategoryWeights(weights);
+    }
+  }
+
+  /// 清除類別權重
+  Future<void> clearCategoryWeights() async {
+    await _sharedPreferencesService.instance.remove(_keyCategoryWeights);
+  }
+
+  /// 清除所有動滋券相關資料（用於開發/測試）
+  Future<void> clearAllData() async {
+    await clearLikes();
+    await clearBalance();
+    await clearCategoryWeights();
   }
 }
 

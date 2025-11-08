@@ -5,6 +5,7 @@ import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
 import 'package:town_pass/module_sports_voucher/service/sv_api_service.dart';
 import 'package:town_pass/module_sports_voucher/service/sv_location_service.dart';
 import 'package:town_pass/module_sports_voucher/service/sv_storage_service.dart';
+import 'package:town_pass/module_sports_voucher/service/sv_recommendation_service.dart';
 import 'package:town_pass/module_sports_voucher/util/sv_dialog_util.dart';
 import 'package:town_pass/module_sports_voucher/util/sv_formatter.dart';
 import 'package:town_pass/service/geo_locator_service.dart';
@@ -26,6 +27,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
   final SvApiService _apiService = SvApiService();
   late final SvStorageService _storageService;
   late final SvLocationService _locationService;
+  late final SvRecommendationService _recommendationService;
   
   List<SvMerchant> _merchants = [];
   int _currentIndex = 0;
@@ -44,6 +46,11 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
     
     _storageService = SvStorageService(Get.find<SharedPreferencesService>());
     _locationService = SvLocationService(Get.find<GeoLocatorService>());
+    _recommendationService = SvRecommendationService(
+      apiService: _apiService,
+      locationService: _locationService,
+      storageService: _storageService,
+    );
     
     _loadBalance();
     _loadData();
@@ -72,12 +79,11 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
       // 取得使用者位置
       _userPosition = await _locationService.getCurrentPosition();
       
-      // 取得可用店家（使用 products 計算最低消費）
-      if (_balance != null && _balance! > 0) {
-        _merchants = await _apiService.fetchAffordableMerchantsWithProducts(_balance!);
-      } else {
-        _merchants = await _apiService.fetchMerchantsWithProducts();
-      }
+      // 使用推薦演算法取得排序後的店家列表
+      _merchants = await _recommendationService.getRecommendedMerchants(
+        userPosition: _userPosition!,
+        balance: _balance,
+      );
       
       if (_merchants.isEmpty) {
         if (mounted) {
@@ -110,6 +116,11 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
     if (_currentIndex < _merchants.length) {
       final merchant = _merchants[_currentIndex];
       await _storageService.addLike(merchant.id);
+      
+      // 更新該店家的類別權重
+      final category = merchant.category ?? '其他';
+      await _storageService.incrementCategoryWeight(category);
+      
       _swipeCard(1);
     }
   }
