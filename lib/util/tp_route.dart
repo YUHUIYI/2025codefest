@@ -33,6 +33,10 @@ import 'package:town_pass/page/setting/setting_view_controller.dart';
 import 'package:town_pass/page/subscription/subscription_view.dart';
 import 'package:town_pass/page/suspend_account/suspend_account_controller.dart';
 import 'package:town_pass/page/suspend_account/suspend_account_view.dart';
+import 'package:town_pass/module_sports_voucher/page/sv_home_page.dart';
+import 'package:town_pass/module_sports_voucher/page/sv_map_page.dart';
+import 'package:town_pass/module_sports_voucher/page/sv_match_page.dart';
+import 'package:town_pass/module_sports_voucher/page/sv_text_search_page.dart';
 import 'package:town_pass/util/tp_web_view.dart';
 
 abstract class TPRoute {
@@ -59,6 +63,7 @@ abstract class TPRoute {
   static const String subscription = '/subscription';
   static const String suspendAccount = '/suspend_account';
   static const String webView = '/web_view';
+  static const String sportsVoucherHome = '/sv/home';
 
   static final List<GetPage> page = [
     GetPage(
@@ -185,6 +190,22 @@ abstract class TPRoute {
       name: activityDetail,
       page: () => const ActivityDetailView(),
     ),
+    GetPage(
+      name: sportsVoucherHome,
+      page: () => const SvHomePage(),
+    ),
+    GetPage(
+      name: '/sv/map',
+      page: () => const SvMapPage(),
+    ),
+    GetPage(
+      name: '/sv/search',
+      page: () => const SvTextSearchPage(),
+    ),
+    GetPage(
+      name: '/sv/match',
+      page: () => const SvMatchPage(),
+    ),
   ];
 
   static Future openUri({required String uri, String? forceTitle}) async {
@@ -194,12 +215,20 @@ abstract class TPRoute {
 
     return switch (Uri.tryParse(uri)) {
       null => Future.value(null),
-      Uri uri => switch (uri.scheme) {
-          'local' => Get.toNamed(uri.host),
+      Uri parsedUri => switch (parsedUri.scheme) {
+          'local' => Get.toNamed(
+              parsedUri.path.isNotEmpty
+                  ? parsedUri.path.startsWith('/')
+                      ? parsedUri.path
+                      : '/${parsedUri.path}'
+                  : parsedUri.host.startsWith('/')
+                      ? parsedUri.host
+                      : '/${parsedUri.host}',
+            ),
           _ => Get.toNamed(
               TPRoute.webView,
               arguments: WebViewArgument(
-                url: uri.toString(),
+                url: parsedUri.toString(),
                 forceTitle: forceTitle,
               ),
             ),

@@ -1,0 +1,5 @@
+node_modules/
+vendors.csv
+*.log
+.DS_Store
+
