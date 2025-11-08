@@ -17,7 +17,7 @@ class SvNavigatorUtil {
   }
 
   /// 前往地圖頁
-  static void toMap({required double balance}) {
+  static void toMap({double? balance}) {
     Get.toNamed(
       map,
       arguments: {'balance': balance},

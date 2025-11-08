@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:town_pass/service/shared_preferences_service.dart';
 
 /// 動滋券本地儲存服務
-/// 管理使用者的 Like 清單
+/// 管理使用者的 Like 清單和餘額
 class SvStorageService {
   static const String _keyLikes = 'sv_likes';
+  static const String _keyBalance = 'sv_balance';
   final SharedPreferencesService _sharedPreferencesService;
 
   SvStorageService(this._sharedPreferencesService);
@@ -54,6 +55,21 @@ class SvStorageService {
   /// 清除所有 Like
   Future<void> clearLikes() async {
     await _sharedPreferencesService.instance.remove(_keyLikes);
+  }
+
+  /// 儲存餘額
+  Future<void> saveBalance(double balance) async {
+    await _sharedPreferencesService.instance.setDouble(_keyBalance, balance);
+  }
+
+  /// 取得餘額
+  Future<double?> getBalance() async {
+    return _sharedPreferencesService.instance.getDouble(_keyBalance);
+  }
+
+  /// 清除餘額
+  Future<void> clearBalance() async {
+    await _sharedPreferencesService.instance.remove(_keyBalance);
   }
 }
 
