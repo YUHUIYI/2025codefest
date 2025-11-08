@@ -96,7 +96,7 @@ class _SvMapPageState extends State<SvMapPage> {
 
       if (_priceFilterEnabled) {
         final minPrice = _storeMinProductPrices[merchant.id];
-        if (minPrice == null || minPrice > _priceThreshold) {
+      if (minPrice == null || minPrice <= 0 || minPrice > _priceThreshold) {
           return false;
         }
       }
@@ -128,9 +128,9 @@ class _SvMapPageState extends State<SvMapPage> {
   }
 
   void _applyFilters({VoidCallback? beforeSetState}) {
-    final filteredMerchants = _calculateFilteredMerchants();
     setState(() {
       beforeSetState?.call();
+      final filteredMerchants = _calculateFilteredMerchants();
       _displayedMerchants = filteredMerchants;
       _markers = _buildMarkers(filteredMerchants);
       if (_selectedMerchant != null &&
@@ -183,6 +183,7 @@ class _SvMapPageState extends State<SvMapPage> {
           _storeDistancesKm = distances;
         });
         _applyFilters();
+        _logLikedMerchants('initial_load');
       }
 
       if (_mapController != null && _userPosition != null) {
@@ -225,6 +226,7 @@ class _SvMapPageState extends State<SvMapPage> {
         _likedMerchantIds.add(merchant.id);
       }
     });
+    _logLikedMerchants('toggle');
 
     if (_selectedMerchant != null &&
         !_displayedMerchants.any((m) => m.id == _selectedMerchant!.id)) {
@@ -322,6 +324,18 @@ class _SvMapPageState extends State<SvMapPage> {
     _applyFilters(beforeSetState: () {
       _priceThreshold = clamped;
     });
+  }
+
+  void _logLikedMerchants(String source) {
+    if (_likedMerchantIds.isEmpty) {
+      debugPrint('[SV Map][$source] liked list is empty');
+      return;
+    }
+    final preview = _likedMerchantIds.take(10).join(', ');
+    debugPrint(
+      '[SV Map][$source] liked merchants (${_likedMerchantIds.length} total): $preview'
+          '${_likedMerchantIds.length > 10 ? ' ...' : ''}',
+    );
   }
 
   @override
