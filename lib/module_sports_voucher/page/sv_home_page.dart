@@ -116,6 +116,8 @@ class _SvHomePageState extends State<SvHomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Banner 圖片
+            _buildBanner(),
             // 大卡片：輸入金額區域
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -200,6 +202,32 @@ class _SvHomePageState extends State<SvHomePage> {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBanner() {
+    return Container(
+      width: double.infinity,
+      height: 180,
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Image.asset(
+        'assets/image/sv_banner.png',
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          // 如果圖片不存在，顯示佔位符
+          return Container(
+            color: TPColors.primary100,
+            child: Center(
+              child: Text(
+                'Banner 圖片',
+                style: TPTextStyles.bodyRegular.copyWith(
+                  color: TPColors.grayscale600,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
