@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
@@ -8,8 +10,8 @@ import 'package:town_pass/module_sports_voucher/util/sv_formatter.dart';
 import 'package:town_pass/service/shared_preferences_service.dart';
 import 'package:town_pass/util/tp_app_bar.dart';
 import 'package:town_pass/util/tp_colors.dart';
-import 'package:town_pass/util/tp_text.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// 動滋券文字搜尋頁
 class SvTextSearchPage extends StatefulWidget {
@@ -27,7 +29,10 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
   List<SvMerchant> _allMerchants = [];
   List<SvMerchant> _displayedMerchants = [];
   List<String> _likedIds = [];
-  String _filterMode = 'all'; // 'all', 'affordable', 'liked'
+  Map<String, List<Map<String, dynamic>>> _storeProducts = {};
+  bool _showFavoritesOnly = false;
+  double _priceSliderMax = 1000;
+  double _priceSliderValue = 1000;
   double? _balance;
   bool _isLoading = true;
 
@@ -65,8 +70,22 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     });
     
     try {
-      _allMerchants = await _apiService.fetchMerchants();
-      _likedIds = await _storageService.getLikes();
+      final merchants = await _apiService.fetchMerchants();
+      final likedIds = await _storageService.getLikes();
+      final storeProducts = await _apiService.fetchStoreProducts();
+      final priceMax = _calculatePriceSliderMax(merchants, storeProducts);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _allMerchants = merchants;
+        _likedIds = likedIds;
+        _storeProducts = storeProducts;
+        _priceSliderMax = priceMax;
+        _priceSliderValue = priceMax;
+      });
       _updateDisplayedMerchants();
     } catch (e) {
       if (mounted) {
@@ -86,40 +105,43 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
   void _updateDisplayedMerchants() {
     setState(() {
       String searchQuery = _searchController.text.toLowerCase().trim();
-      
-      List<SvMerchant> filtered = _allMerchants;
-      
-      // 根據篩選模式過濾
-      switch (_filterMode) {
-        case 'affordable':
-          if (_balance != null) {
-            filtered = filtered.where((m) => m.isAffordable(_balance!)).toList();
-          }
-          break;
-        case 'liked':
-          filtered = filtered.where((m) => _likedIds.contains(m.id)).toList();
-          break;
-        default:
-          break;
+
+      List<SvMerchant> filtered = List<SvMerchant>.from(_allMerchants);
+
+      if (_showFavoritesOnly) {
+        filtered = filtered.where((merchant) => _likedIds.contains(merchant.id)).toList();
       }
-      
-      // 根據搜尋關鍵字過濾
-      if (searchQuery.isNotEmpty) {
+
+      final hasPriceFilter =
+          _priceSliderMax > 0 && (_priceSliderMax - _priceSliderValue).abs() > 0.1;
+      if (hasPriceFilter) {
         filtered = filtered.where((merchant) {
-          return merchant.name.toLowerCase().contains(searchQuery) ||
-              merchant.address.toLowerCase().contains(searchQuery);
+          final price = _getEffectiveMinPrice(merchant);
+          return price <= _priceSliderValue;
         }).toList();
       }
-      
+
+      if (searchQuery.isNotEmpty) {
+        filtered = filtered.where((merchant) {
+          final nameMatch = merchant.name.toLowerCase().contains(searchQuery);
+
+          if (nameMatch) {
+            return true;
+          }
+
+          final products = _storeProducts[merchant.id] ?? [];
+          final productMatch = products.any((product) {
+            final productName = product['product_name'];
+            return productName != null &&
+                productName.toString().toLowerCase().contains(searchQuery);
+          });
+
+          return productMatch;
+        }).toList();
+      }
+
       _displayedMerchants = filtered;
     });
-  }
-
-  void _onFilterChanged(String mode) {
-    setState(() {
-      _filterMode = mode;
-    });
-    _updateDisplayedMerchants();
   }
 
   Future<void> _toggleLike(SvMerchant merchant) async {
@@ -130,7 +152,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
       await _storageService.addLike(merchant.id);
     }
     _likedIds = await _storageService.getLikes();
-    setState(() {});
+    _updateDisplayedMerchants();
   }
 
   void _showMerchantDetail(SvMerchant merchant) {
@@ -194,14 +216,13 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                       icon: Icons.location_on,
                       label: '地址',
                       value: merchant.address,
+                      onTap: merchant.address.isNotEmpty
+                          ? () => _launchGoogleMaps(merchant.address)
+                          : null,
                     ),
                     const SizedBox(height: 16),
-                    // 最低消費
-                    _buildDetailRow(
-                      icon: Icons.payment,
-                      label: '最低消費',
-                      value: SvFormatter.formatCurrency(merchant.minSpend),
-                    ),
+                    // 商品列表
+                    _buildProductsSection(merchant),
                     if (merchant.phone != null) ...[
                       const SizedBox(height: 16),
                       _buildDetailRow(
@@ -268,6 +289,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     required IconData icon,
     required String label,
     required String value,
+    VoidCallback? onTap,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,10 +305,21 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                 style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
               ),
               const SizedBox(height: 4),
-              Text(
-                value,
-                style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
-              ),
+              onTap != null
+                  ? InkWell(
+                      onTap: onTap,
+                      child: Text(
+                        value,
+                        style: TPTextStyles.bodyRegular.copyWith(
+                          color: TPColors.primary600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      value,
+                      style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                    ),
             ],
           ),
         ),
@@ -332,33 +365,25 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
           Container(
             padding: const EdgeInsets.all(16),
             color: TPColors.white,
-            child: Column(
+            child: Row(
               children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: '搜尋店家名稱或地址',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: '搜尋店家名稱或商品名稱',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      filled: true,
+                      fillColor: TPColors.grayscale50,
                     ),
-                    filled: true,
-                    fillColor: TPColors.grayscale50,
+                    style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale950),
                   ),
-                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale950),
                 ),
-                const SizedBox(height: 12),
-                // 篩選按鈕
-                Row(
-                  children: [
-                    _buildFilterChip('all', '全部'),
-                    const SizedBox(width: 8),
-                    if (_balance != null)
-                      _buildFilterChip('affordable', '可用'),
-                    if (_balance != null) const SizedBox(width: 8),
-                    _buildFilterChip('liked', '收藏'),
-                  ],
-                ),
+                const SizedBox(width: 12),
+                _buildFilterButton(),
               ],
             ),
           ),
@@ -387,27 +412,11 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
     );
   }
 
-  Widget _buildFilterChip(String mode, String label) {
-    final isSelected = _filterMode == mode;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (selected) {
-        if (selected) {
-          _onFilterChanged(mode);
-        }
-      },
-      selectedColor: TPColors.primary500,
-      labelStyle: TPTextStyles.bodyRegular.copyWith(
-        color: isSelected ? TPColors.white : TPColors.grayscale700,
-      ),
-    );
-  }
-
   Widget _buildMerchantCard(SvMerchant merchant) {
     final isLiked = _likedIds.contains(merchant.id);
-    final isAffordable = _balance != null && merchant.isAffordable(_balance!);
-    
+    final products = _storeProducts[merchant.id] ?? [];
+    final minPrice = _getStoreMinPrice(products) ?? merchant.minSpend;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
@@ -441,32 +450,27 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                merchant.address,
-                style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Text(
-                    '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
-                    style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
-                  ),
-                  if (isAffordable) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: TPColors.primary50,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '可用',
-                        style: TPTextStyles.caption.copyWith(color: TPColors.primary600),
-                      ),
+              if (merchant.address.isNotEmpty)
+                InkWell(
+                  onTap: () => _launchGoogleMaps(merchant.address),
+                  child: Text(
+                    merchant.address,
+                    style: TPTextStyles.bodyRegular.copyWith(
+                      color: TPColors.primary600,
+                      decoration: TextDecoration.underline,
                     ),
-                  ],
-                ],
+                  ),
+                )
+              else
+                Text(
+                  '暫無地址資訊',
+                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale500),
+                ),
+              const SizedBox(height: 8),
+              const SizedBox(height: 8),
+              Text(
+                '最低消費：${SvFormatter.formatCurrency(minPrice)}',
+                style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
               ),
               if (merchant.description != null) ...[
                 const SizedBox(height: 8),
@@ -482,6 +486,312 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildFilterButton() {
+    final hasActiveFilter = _showFavoritesOnly ||
+        (_priceSliderMax > 0 && (_priceSliderMax - _priceSliderValue).abs() > 0.1);
+
+    return InkWell(
+      onTap: _showFilterSheet,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: hasActiveFilter ? TPColors.primary500 : TPColors.primary200,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(
+          Icons.tune,
+          color: TPColors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProductsSection(SvMerchant merchant) {
+    final products = _storeProducts[merchant.id] ?? [];
+
+    if (products.isEmpty) {
+      return _buildDetailRow(
+        icon: Icons.shopping_bag,
+        label: '商品',
+        value: '目前無商品資訊',
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.shopping_bag, size: 20, color: TPColors.primary500),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '商品',
+                style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.grayscale900),
+              ),
+              const SizedBox(height: 8),
+              ...products.map((product) {
+                final productName = product['product_name']?.toString() ?? '未命名商品';
+                final priceText = _formatPrice(product['price']);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          productName,
+                          style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                        ),
+                      ),
+                      Text(
+                        priceText,
+                        style: TPTextStyles.bodyRegular.copyWith(color: TPColors.primary600),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _launchGoogleMaps(String address) async {
+    final encodedAddress = Uri.encodeComponent(address);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$encodedAddress');
+
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        SvDialogUtil.showErrorDialog(context, '無法開啟 Google Maps');
+      }
+    }
+  }
+
+  Future<void> _showFilterSheet() async {
+    bool tempFavorites = _showFavoritesOnly;
+    double tempPrice = _priceSliderValue.clamp(0, _priceSliderMax).toDouble();
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateModal) {
+            final isUnlimited =
+                (tempPrice - _priceSliderMax).abs() <= 0.1 || _priceSliderMax == 0;
+            final priceLabel =
+                isUnlimited ? '不限' : SvFormatter.formatCurrency(tempPrice);
+
+            final divisions =
+                _priceSliderMax > 0 ? math.max(1, (_priceSliderMax ~/ 100)) : 1;
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 24,
+                bottom: 20 + MediaQuery.of(context).viewPadding.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: TPColors.grayscale300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    '篩選',
+                    style: TPTextStyles.h2SemiBold.copyWith(
+                      color: TPColors.grayscale950,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  CheckboxListTile(
+                    value: tempFavorites,
+                    onChanged: (value) {
+                      setStateModal(() {
+                        tempFavorites = value ?? false;
+                      });
+                    },
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '只顯示收藏',
+                      style: TPTextStyles.bodySemiBold.copyWith(
+                        color: TPColors.grayscale900,
+                      ),
+                    ),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: TPColors.primary500,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    '價格上限',
+                    style: TPTextStyles.bodySemiBold.copyWith(
+                      color: TPColors.grayscale900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'NT\$0',
+                        style: TPTextStyles.bodyRegular.copyWith(
+                          color: TPColors.grayscale500,
+                        ),
+                      ),
+                      Text(
+                        priceLabel,
+                        style: TPTextStyles.bodySemiBold.copyWith(
+                          color: TPColors.primary600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Slider(
+                    value: tempPrice,
+                    min: 0,
+                    max: _priceSliderMax,
+                    divisions: divisions.toInt(),
+                    label: priceLabel,
+                    onChanged: (value) {
+                      setStateModal(() {
+                        tempPrice = value;
+                      });
+                    },
+                    activeColor: TPColors.primary500,
+                    inactiveColor: TPColors.primary100,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TPColors.grayscale700,
+                            side: const BorderSide(color: TPColors.grayscale200),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text('取消'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop({
+                              'favorites': tempFavorites,
+                              'price': tempPrice,
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: TPColors.primary500,
+                            foregroundColor: TPColors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text('套用'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _showFavoritesOnly = result['favorites'] as bool? ?? false;
+        final priceValue = (result['price'] as double?) ?? _priceSliderMax;
+        _priceSliderValue = priceValue.clamp(0, _priceSliderMax).toDouble();
+      });
+      _updateDisplayedMerchants();
+    }
+  }
+
+  double _getEffectiveMinPrice(SvMerchant merchant) {
+    final products = _storeProducts[merchant.id] ?? [];
+    return _getStoreMinPrice(products) ?? merchant.minSpend;
+  }
+
+  double _calculatePriceSliderMax(
+    List<SvMerchant> merchants,
+    Map<String, List<Map<String, dynamic>>> storeProducts,
+  ) {
+    double maxPrice = 0;
+
+    for (final merchant in merchants) {
+      final products = storeProducts[merchant.id] ?? [];
+      final price = _getStoreMinPrice(products) ?? merchant.minSpend;
+      if (price > maxPrice) {
+        maxPrice = price;
+      }
+    }
+
+    if (maxPrice <= 0) {
+      return 1000;
+    }
+
+    final rounded = (maxPrice / 100).ceil() * 100;
+    return math.max(rounded.toDouble(), 100);
+  }
+
+  double? _getStoreMinPrice(List<Map<String, dynamic>> products) {
+    double? minPrice;
+
+    for (final product in products) {
+      final price = product['price'];
+      final priceValue = price is num
+          ? price.toDouble()
+          : price is String
+              ? double.tryParse(price)
+              : null;
+
+      if (priceValue != null && priceValue > 0) {
+        if (minPrice == null || priceValue < minPrice) {
+          minPrice = priceValue;
+        }
+      }
+    }
+
+    return minPrice;
+  }
+
+  String _formatPrice(dynamic price) {
+    if (price is num) {
+      return SvFormatter.formatCurrency(price.toDouble());
+    }
+    if (price is String) {
+      final parsed = double.tryParse(price);
+      if (parsed != null) {
+        return SvFormatter.formatCurrency(parsed);
+      }
+    }
+    return '—';
   }
 }
 

@@ -365,154 +365,164 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
           borderRadius: BorderRadius.circular(20),
         ),
         margin: const EdgeInsets.all(8),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                TPColors.primary100,
-                TPColors.white,
-              ],
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 圖片區域（增大比例）
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: SizedBox(
-                  height: 380,
-                  width: double.infinity,
-                  child: (merchant.imageUrl != null && merchant.imageUrl!.isNotEmpty)
-                      ? Image.network(
-                          merchant.imageUrl!,
-                          fit: BoxFit.cover,
-                          cacheWidth: 800, // 限制快取寬度，減少記憶體使用
-                          cacheHeight: 640, // 限制快取高度
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) {
-                              return child;
-                            }
-                            return Container(
-                              color: TPColors.primary100,
-                              child: const Center(child: CircularProgressIndicator()),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return _buildImagePlaceholder();
-                          },
-                        )
-                      : _buildImagePlaceholder(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableHeight = constraints.maxHeight.isFinite ? constraints.maxHeight : 0;
+            final rawImageHeight = availableHeight > 0 ? availableHeight * 0.55 : 280.0;
+            final imageHeight = rawImageHeight.clamp(200.0, 320.0).toDouble();
+
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    TPColors.primary100,
+                    TPColors.white,
+                  ],
                 ),
               ),
-              // 資訊區域
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 店名 - 使用 H1 字體（36px semibold）粗體
-                    Text(
-                      merchant.name,
-                      style: TPTextStyles.h1SemiBold.copyWith(color: TPColors.grayscale950),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 圖片區域（依可用高度調整）
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    child: SizedBox(
+                      height: imageHeight,
+                      width: double.infinity,
+                      child: (merchant.imageUrl != null && merchant.imageUrl!.isNotEmpty)
+                          ? Image.network(
+                              merchant.imageUrl!,
+                              fit: BoxFit.cover,
+                              cacheWidth: 800, // 限制快取寬度，減少記憶體使用
+                              cacheHeight: 640, // 限制快取高度
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) {
+                                  return child;
+                                }
+                                return Container(
+                                  color: TPColors.primary100,
+                                  child: const Center(child: CircularProgressIndicator()),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return _buildImagePlaceholder();
+                              },
+                            )
+                          : _buildImagePlaceholder(),
                     ),
-                    // 類別標籤
-                    if (merchant.category != null && merchant.category!.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: TPColors.primary100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          merchant.category!,
-                          style: TPTextStyles.caption.copyWith(
-                            color: TPColors.primary600,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 6),
-                    // 地址 - 字體放大
-                    Row(
-                      children: [
-                        Icon(Icons.location_on, size: 16, color: TPColors.grayscale600),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            merchant.address,
-                            style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                  ),
+                  // 資訊區域（不足高度時可滾動）
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 店名 - 使用 H1 字體（36px semibold）粗體
+                          Text(
+                            merchant.name,
+                            style: TPTextStyles.h1SemiBold.copyWith(color: TPColors.grayscale950),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
-                    ),
-                    if (merchant.businessHours != null) ...[
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Icon(Icons.access_time, size: 16, color: TPColors.grayscale600),
-                          const SizedBox(width: 4),
-                          Expanded(
+                          // 類別標籤
+                          if (merchant.category != null && merchant.category!.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: TPColors.primary100,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                merchant.category!,
+                                style: TPTextStyles.caption.copyWith(
+                                  color: TPColors.primary600,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          // 地址 - 字體放大
+                          Row(
+                            children: [
+                              Icon(Icons.location_on, size: 16, color: TPColors.grayscale600),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  merchant.address,
+                                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (merchant.businessHours != null) ...[
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time, size: 16, color: TPColors.grayscale600),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    merchant.businessHours!,
+                                    style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (distance != null) ...[
+                            const SizedBox(height: 5),
+                            Row(
+                              children: [
+                                Icon(Icons.straighten, size: 16, color: TPColors.grayscale600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  SvFormatter.formatDistance(distance),
+                                  style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          // 最低消費標籤
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: TPColors.primary500,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
                             child: Text(
-                              merchant.businessHours!,
-                              style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                              '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
+                              style: TPTextStyles.caption.copyWith(
+                                color: TPColors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
-                    ],
-                    if (distance != null) ...[
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Icon(Icons.straighten, size: 16, color: TPColors.grayscale600),
-                          const SizedBox(width: 4),
-                          Text(
-                            SvFormatter.formatDistance(distance),
-                            style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 6),
-                    // 最低消費標籤
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: TPColors.primary500,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
-                        style: TPTextStyles.caption.copyWith(
-                          color: TPColors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
