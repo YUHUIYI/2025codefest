@@ -60,5 +60,8 @@
         <string>This app needs photos access to get QR code from photo library</string>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- Google Maps API Key -->
+		<key>GMSApiKey</key>
+		<string>YOUR_GOOGLE_MAPS_API_KEY_HERE</string>
 	</dict>
 </plist>
