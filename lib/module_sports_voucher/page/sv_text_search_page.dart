@@ -333,34 +333,23 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
       appBar: TPAppBar(
         title: '文字搜尋',
         backgroundColor: TPColors.white,
+        actions: [
+          if (_balance != null && _balance! > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(
+                child: Text(
+                  SvFormatter.formatCurrency(_balance!),
+                  style: TPTextStyles.bodySemiBold.copyWith(
+                    color: TPColors.primary500,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [
-          // 餘額提示
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: TPColors.primary50,
-            child: Row(
-              children: [
-                Icon(
-                  _balance != null ? Icons.account_balance_wallet : Icons.warning_amber_rounded,
-                  size: 20,
-                  color: _balance != null ? TPColors.primary500 : TPColors.grayscale600,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _balance != null
-                        ? '💰 目前餘額：${SvFormatter.formatCurrency(_balance!)}'
-                        : '⚠️ 尚未儲存餘額，僅供瀏覽查詢。',
-                    style: TPTextStyles.bodyRegular.copyWith(
-                      color: _balance != null ? TPColors.primary600 : TPColors.grayscale600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
           // 搜尋欄
           Container(
             padding: const EdgeInsets.all(16),
@@ -466,12 +455,26 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                   '暫無地址資訊',
                   style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale500),
                 ),
-              const SizedBox(height: 8),
-              const SizedBox(height: 8),
-              Text(
-                '最低消費：${SvFormatter.formatCurrency(minPrice)}',
-                style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.primary500),
-              ),
+              // 最低消費標籤（如果為 0 則不顯示）
+              if (minPrice > 0) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: TPColors.primary500,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '最低消費 : ${SvFormatter.formatCurrency(minPrice)}',
+                    style: TPTextStyles.caption.copyWith(
+                      color: TPColors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
               if (merchant.description != null) ...[
                 const SizedBox(height: 8),
                 Text(
