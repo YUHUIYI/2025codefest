@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 
-/// 動茲券導航工具
+/// 動滋券導航工具
 class SvNavigatorUtil {
   /// 路由名稱
   static const String home = '/sv/home';

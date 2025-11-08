@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
 
-/// 動茲券對話框工具
+/// 動滋券對話框工具
 class SvDialogUtil {
   /// 顯示錯誤對話框
   static void showErrorDialog(

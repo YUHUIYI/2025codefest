@@ -11,7 +11,7 @@ import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/tp_text.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
 
-/// 動茲券文字搜尋頁
+/// 動滋券文字搜尋頁
 class SvTextSearchPage extends StatefulWidget {
   const SvTextSearchPage({super.key});
 

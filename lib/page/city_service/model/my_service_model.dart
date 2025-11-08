@@ -185,8 +185,8 @@ extension MyServiceIdExt on MyServiceItemId {
           destinationUrl: '',
         ),
       MyServiceItemId.sportsVoucher => MyServiceItem(
-          title: '動茲券查詢',
-          description: '動茲券合作店家查詢與配對',
+          title: '動滋券查詢',
+          description: '動滋券合作店家查詢與配對',
           icon: Assets.svg.iconCouponTicket.svg(),
           category: MyServiceCategory.cityLife,
           destinationUrl: 'local://sv/home',
