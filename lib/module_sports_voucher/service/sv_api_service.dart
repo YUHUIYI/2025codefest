@@ -1,42 +1,84 @@
 import 'dart:convert';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
 
 /// 動滋券 API 服務
-/// 目前使用模擬資料，未來可替換為真實 API
+/// 先嘗試讀取 Firebase Firestore，若失敗再回退至本地假資料
 class SvApiService {
+  SvApiService({
+    FirebaseFirestore? firestore,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+
   static const String _mockDataPath = 'assets/mock_data/sv_merchants.json';
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _storeCollection =>
+      _firestore.collection('stores');
 
   /// 取得所有合作店家
   Future<List<SvMerchant>> fetchMerchants() async {
     try {
-      // 模擬 API 延遲
-      await Future.delayed(const Duration(milliseconds: 500));
+      final snapshot =
+          await _storeCollection.where('is_active', isEqualTo: true).get();
 
-      // 從本地 JSON 檔案讀取模擬資料
-      final String jsonString = await rootBundle.loadString(_mockDataPath);
-      final List<dynamic> jsonList = json.decode(jsonString) as List<dynamic>;
-      
-      return jsonList.map((json) => SvMerchant.fromJson(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      // 如果讀取失敗，返回預設模擬資料
-      return _getDefaultMockData();
+      if (snapshot.docs.isEmpty) {
+        return await _loadMockData();
+      }
+
+      return snapshot.docs
+          .map(
+            (doc) => SvMerchant.fromMap(
+              doc.data(),
+              documentId: doc.id,
+            ),
+          )
+          .toList();
+    } catch (_) {
+      return await _loadMockData();
     }
   }
 
   /// 根據餘額取得可用店家
   Future<List<SvMerchant>> fetchAffordableMerchants(double balance) async {
-    final allMerchants = await fetchMerchants();
-    return allMerchants.where((merchant) => merchant.isAffordable(balance)).toList();
+    final merchants = await fetchMerchants();
+    return merchants.where((merchant) => merchant.isAffordable(balance)).toList();
   }
 
-  /// 根據 ID 取得店家
+  /// 根據 ID 取得店家（優先查 Firestore，失敗後回退至本地資料）
   Future<SvMerchant?> fetchMerchantById(int id) async {
-    final allMerchants = await fetchMerchants();
     try {
-      return allMerchants.firstWhere((merchant) => merchant.id == id);
-    } catch (e) {
+      final snapshot =
+          await _storeCollection.where('id', isEqualTo: id).limit(1).get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return SvMerchant.fromMap(doc.data(), documentId: doc.id);
+      }
+    } catch (_) {
+      // ignore and fallback to local data
+    }
+
+    final fallback = await _loadMockData();
+    try {
+      return fallback.firstWhere((merchant) => merchant.id == id);
+    } catch (_) {
       return null;
+    }
+  }
+
+  Future<List<SvMerchant>> _loadMockData() async {
+    try {
+      final jsonString = await rootBundle.loadString(_mockDataPath);
+      final List<dynamic> jsonList = json.decode(jsonString) as List<dynamic>;
+      return jsonList
+          .map(
+            (json) => SvMerchant.fromMap(json as Map<String, dynamic>),
+          )
+          .toList();
+    } catch (_) {
+      return _getDefaultMockData();
     }
   }
 
@@ -52,6 +94,10 @@ class SvApiService {
         minSpend: 100.0,
         phone: '02-2345-6789',
         description: '提供多種運動設施與課程',
+        category: '運動中心',
+        businessHours: '每日 08:00-22:00',
+        website: null,
+        isActive: true,
       ),
       SvMerchant(
         id: 2,
@@ -62,6 +108,10 @@ class SvApiService {
         minSpend: 200.0,
         phone: '02-2777-8888',
         description: '24小時營業的現代化健身房',
+        category: '健身房',
+        businessHours: '24 小時營業',
+        website: null,
+        isActive: true,
       ),
       SvMerchant(
         id: 3,
@@ -72,6 +122,10 @@ class SvApiService {
         minSpend: 150.0,
         phone: '02-2500-1234',
         description: '專業游泳教學與訓練',
+        category: '游泳',
+        businessHours: '每日 09:00-21:00',
+        website: null,
+        isActive: true,
       ),
       SvMerchant(
         id: 4,
@@ -82,6 +136,10 @@ class SvApiService {
         minSpend: 300.0,
         phone: '02-2766-7890',
         description: '專業羽球場地租借',
+        category: '羽球',
+        businessHours: '每日 09:00-23:00',
+        website: null,
+        isActive: true,
       ),
       SvMerchant(
         id: 5,
@@ -92,6 +150,10 @@ class SvApiService {
         minSpend: 250.0,
         phone: '02-2799-5678',
         description: '戶外網球場地',
+        category: '網球',
+        businessHours: '每日 08:00-22:00',
+        website: null,
+        isActive: true,
       ),
     ];
   }
