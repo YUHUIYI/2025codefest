@@ -43,7 +43,7 @@ class _SvHomePageState extends State<SvHomePage> {
   }
 
   Future<void> _launchOfficialWebsite() async {
-    final uri = Uri.parse('https://sportsvoucher.gov.tw');
+    final uri = Uri.parse('https://500.gov.tw/FOAS/actions/Consumer114User.action?voucherList');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
@@ -215,7 +215,11 @@ class _SvHomePageState extends State<SvHomePage> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _buildServiceCard(
-                          icon: Assets.svg.iconCouponTicket.svg(),
+                          icon: Icon(
+                            Icons.favorite,
+                            size: 40,
+                            color: TPColors.primary500,
+                          ),
                           title: '配對推薦',
                           description: '滑動配對店家',
                           onTap: () {

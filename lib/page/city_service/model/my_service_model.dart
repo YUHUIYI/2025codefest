@@ -189,7 +189,7 @@ extension MyServiceIdExt on MyServiceItemId {
           description: '動滋券合作店家查詢與配對',
           icon: Assets.svg.iconCouponTicket.svg(),
           category: MyServiceCategory.cityLife,
-          destinationUrl: 'local://sv/home',
+          destinationUrl: 'local:///sv/home',
         ),
     };
   }
