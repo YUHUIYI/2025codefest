@@ -251,7 +251,7 @@ class _SvTextSearchPageState extends State<SvTextSearchPage> {
                       _buildDetailRow(
                         icon: Icons.update,
                         label: '更新時間',
-                        value: merchant.updatedAt!,
+                        value: SvFormatter.formatDateTime(merchant.updatedAt!),
                       ),
                     ],
                   ],
