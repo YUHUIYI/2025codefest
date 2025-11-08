@@ -72,11 +72,11 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
       // 取得使用者位置
       _userPosition = await _locationService.getCurrentPosition();
       
-      // 取得可用店家
+      // 取得可用店家（使用 products 計算最低消費）
       if (_balance != null && _balance! > 0) {
-        _merchants = await _apiService.fetchAffordableMerchants(_balance!);
+        _merchants = await _apiService.fetchAffordableMerchantsWithProducts(_balance!);
       } else {
-        _merchants = await _apiService.fetchMerchants();
+        _merchants = await _apiService.fetchMerchantsWithProducts();
       }
       
       if (_merchants.isEmpty) {
@@ -170,6 +170,22 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
     }
   }
 
+  Widget _buildBalanceAction() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Center(
+        child: Text(
+          _balance != null
+              ? SvFormatter.formatCurrency(_balance!)
+              : '未設定',
+          style: TPTextStyles.bodySemiBold.copyWith(
+            color: _balance != null ? TPColors.primary600 : TPColors.grayscale600,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -177,6 +193,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
         appBar: TPAppBar(
           title: '餘額配對',
           backgroundColor: TPColors.white,
+          actions: [_buildBalanceAction()],
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -187,6 +204,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
         appBar: TPAppBar(
           title: '餘額配對',
           backgroundColor: TPColors.white,
+          actions: [_buildBalanceAction()],
         ),
         body: Center(
           child: Column(
@@ -212,6 +230,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
         appBar: TPAppBar(
           title: '餘額配對',
           backgroundColor: TPColors.white,
+          actions: [_buildBalanceAction()],
         ),
         body: Center(
           child: Column(
@@ -241,98 +260,76 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
       appBar: TPAppBar(
         title: '餘額配對',
         backgroundColor: TPColors.white,
+        actions: [_buildBalanceAction()],
       ),
-      body: Column(
-        children: [
-          // 餘額提示
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: TPColors.primary50,
-            child: Row(
-              children: [
-                Icon(
-                  _balance != null ? Icons.account_balance_wallet : Icons.warning_amber_rounded,
-                  size: 20,
-                  color: _balance != null ? TPColors.primary500 : TPColors.grayscale600,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _balance != null
-                        ? '目前餘額：${SvFormatter.formatCurrency(_balance!)}'
-                        : '⚠️ 尚未儲存餘額，僅供瀏覽查詢。',
-                    style: TPTextStyles.bodyRegular.copyWith(
-                      color: _balance != null ? TPColors.primary600 : TPColors.grayscale600,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 卡片區域
+            Expanded(
+              child: Stack(
+                children: [
+                  // 下一張卡片（背景）
+                  if (nextMerchant != null)
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                        child: _buildCard(nextMerchant, isNext: true),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // 卡片區域
-          Expanded(
-            child: Stack(
-              children: [
-          // 下一張卡片（背景）
-          if (nextMerchant != null)
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: _buildCard(nextMerchant, isNext: true),
-              ),
-            ),
-          // 當前卡片
-          Positioned.fill(
-            child: AnimatedContainer(
-              duration: _isSwiping ? const Duration(milliseconds: 300) : Duration.zero,
-              curve: Curves.easeOut,
-              child: GestureDetector(
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: _onPanEnd,
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Transform.translate(
-                    offset: Offset(_isSwiping ? (_dragPosition > 0 ? 1000 : -1000) : _dragPosition, 0),
-                    child: Transform.rotate(
-                      angle: _dragPosition * 0.001,
-                      child: Opacity(
-                        opacity: _isSwiping ? 0.0 : 1.0,
-                        child: _buildCard(currentMerchant),
+                  // 當前卡片
+                  Positioned.fill(
+                    child: AnimatedContainer(
+                      duration: _isSwiping ? const Duration(milliseconds: 300) : Duration.zero,
+                      curve: Curves.easeOut,
+                      child: GestureDetector(
+                        onPanUpdate: _onPanUpdate,
+                        onPanEnd: _onPanEnd,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                          child: Transform.translate(
+                            offset: Offset(_isSwiping ? (_dragPosition > 0 ? 1000 : -1000) : _dragPosition, 0),
+                            child: Transform.rotate(
+                              angle: _dragPosition * 0.001,
+                              child: Opacity(
+                                opacity: _isSwiping ? 0.0 : 1.0,
+                                child: _buildCard(currentMerchant),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  // 操作按鈕
+                  Positioned(
+                    bottom: 20,
+                    left: 0,
+                    right: 0,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Skip 按鈕
+                        _buildActionButton(
+                          icon: Icons.close,
+                          color: TPColors.grayscale400,
+                          onPressed: _onSwipeLeft,
+                        ),
+                        const SizedBox(width: 24),
+                        // Like 按鈕
+                        _buildActionButton(
+                          icon: Icons.favorite,
+                          color: TPColors.red500,
+                          onPressed: _onSwipeRight,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          // 操作按鈕
-          Positioned(
-            bottom: 32,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Skip 按鈕
-                _buildActionButton(
-                  icon: Icons.close,
-                  color: TPColors.grayscale400,
-                  onPressed: _onSwipeLeft,
-                ),
-                const SizedBox(width: 24),
-                // Like 按鈕
-                _buildActionButton(
-                  icon: Icons.favorite,
-                  color: TPColors.red500,
-                  onPressed: _onSwipeRight,
-                ),
-              ],
-            ),
-          ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -356,6 +353,7 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
+        margin: const EdgeInsets.all(8),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
@@ -371,33 +369,70 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 圖片區域（模擬）
-              Container(
-                height: 300,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  color: TPColors.primary200,
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.store,
-                    size: 80,
-                    color: TPColors.primary600,
-                  ),
+              // 圖片區域（增大比例）
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                child: SizedBox(
+                  height: 380,
+                  width: double.infinity,
+                  child: (merchant.imageUrl != null && merchant.imageUrl!.isNotEmpty)
+                      ? Image.network(
+                          merchant.imageUrl!,
+                          fit: BoxFit.cover,
+                          cacheWidth: 800, // 限制快取寬度，減少記憶體使用
+                          cacheHeight: 640, // 限制快取高度
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+                            return Container(
+                              color: TPColors.primary100,
+                              child: const Center(child: CircularProgressIndicator()),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return _buildImagePlaceholder();
+                          },
+                        )
+                      : _buildImagePlaceholder(),
                 ),
               ),
               // 資訊區域
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // 店名 - 使用 H1 字體（36px semibold）粗體
                     Text(
                       merchant.name,
                       style: TPTextStyles.h1SemiBold.copyWith(color: TPColors.grayscale950),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 12),
+                    // 類別標籤
+                    if (merchant.category != null && merchant.category!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: TPColors.primary100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          merchant.category!,
+                          style: TPTextStyles.caption.copyWith(
+                            color: TPColors.primary600,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    // 地址 - 字體放大
                     Row(
                       children: [
                         Icon(Icons.location_on, size: 16, color: TPColors.grayscale600),
@@ -406,12 +441,14 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                           child: Text(
                             merchant.address,
                             style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
                     ),
                     if (merchant.businessHours != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 5),
                       Row(
                         children: [
                           Icon(Icons.access_time, size: 16, color: TPColors.grayscale600),
@@ -420,13 +457,15 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                             child: Text(
                               merchant.businessHours!,
                               style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
                     ],
                     if (distance != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 5),
                       Row(
                         children: [
                           Icon(Icons.straighten, size: 16, color: TPColors.grayscale600),
@@ -434,31 +473,30 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
                           Text(
                             SvFormatter.formatDistance(distance),
                             style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ],
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 6),
+                    // 最低消費標籤
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: TPColors.primary500,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         '最低消費：${SvFormatter.formatCurrency(merchant.minSpend)}',
-                        style: TPTextStyles.bodySemiBold.copyWith(color: TPColors.white),
-                      ),
-                    ),
-                    if (merchant.description != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        merchant.description!,
-                        style: TPTextStyles.bodyRegular.copyWith(color: TPColors.grayscale700),
-                        maxLines: 3,
+                        style: TPTextStyles.caption.copyWith(
+                          color: TPColors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
@@ -624,6 +662,19 @@ class _SvMatchPageState extends State<SvMatchPage> with SingleTickerProviderStat
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: TPColors.primary200,
+      child: Center(
+        child: Icon(
+          Icons.store,
+          size: 80,
+          color: TPColors.primary600,
+        ),
+      ),
     );
   }
 
