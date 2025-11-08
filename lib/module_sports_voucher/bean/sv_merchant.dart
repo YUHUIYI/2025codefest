@@ -15,6 +15,12 @@ class SvMerchant {
   final String? phone;
   final String? description;
   final String? imageUrl;
+  @JsonKey(name: 'business_hours')
+  final String? businessHours;
+  final String? category;
+  final String? website;
+  @JsonKey(name: 'updated_at')
+  final String? updatedAt;
 
   SvMerchant({
     required this.id,
@@ -26,6 +32,10 @@ class SvMerchant {
     this.phone,
     this.description,
     this.imageUrl,
+    this.businessHours,
+    this.category,
+    this.website,
+    this.updatedAt,
   });
 
   factory SvMerchant.fromJson(Map<String, dynamic> json) => _$SvMerchantFromJson(json);
