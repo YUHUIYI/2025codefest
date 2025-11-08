@@ -6,6 +6,7 @@ import 'package:town_pass/gen/assets.gen.dart';
 import 'package:town_pass/module_sports_voucher/service/sv_storage_service.dart';
 import 'package:town_pass/module_sports_voucher/util/sv_dialog_util.dart';
 import 'package:town_pass/module_sports_voucher/util/sv_navigator_util.dart';
+import 'package:town_pass/module_sports_voucher/widget/sv_usage_guide.dart';
 import 'package:town_pass/service/shared_preferences_service.dart';
 import 'package:town_pass/util/tp_app_bar.dart';
 import 'package:town_pass/util/tp_colors.dart';
@@ -29,6 +30,14 @@ class _SvHomePageState extends State<SvHomePage> {
   final FocusNode _balanceFocusNode = FocusNode();
   late final SvStorageService _storageService;
   double? _savedBalance;
+  
+  // 使用指引相关的 Key
+  final GlobalKey _balanceCardKey = GlobalKey();
+  final GlobalKey _mapCardKey = GlobalKey();
+  final GlobalKey _textSearchCardKey = GlobalKey();
+  final GlobalKey _matchCardKey = GlobalKey();
+  
+  bool _showUsageGuide = false;
 
   final List<String> _bannerImages = const [
     'assets/image/sv_banner.png',
@@ -177,11 +186,21 @@ class _SvHomePageState extends State<SvHomePage> {
     print('[DEBUG] SvHomePage.build called');
     return Scaffold(
       backgroundColor: TPColors.primary50,
-      appBar: const TPAppBar(
+      appBar: TPAppBar(
         title: '動滋券查詢',
         backgroundColor: TPColors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline, size: 20),
+            iconSize: 20,
+            onPressed: _showUsageGuideDialog,
+            tooltip: '使用指引',
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
+      body: Stack(
+        children: [
+          SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -220,6 +239,47 @@ class _SvHomePageState extends State<SvHomePage> {
                               description: '查看店家位置',
                               onTap: _onMapQueryTap,
                             ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildServiceCard(
+                          key: _mapCardKey,
+                          icon: Assets.svg.iconLocationSearch24.svg(),
+                          title: '地圖查詢',
+                          description: '查看店家位置',
+                          onTap: () {
+                            final balance = _savedBalance ?? double.tryParse(_balanceController.text.trim());
+                            if (balance != null && balance > 0) {
+                              SvNavigatorUtil.toMap(balance: balance);
+                            } else {
+                              SvNavigatorUtil.toMap(balance: null);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildServiceCard(
+                          key: _textSearchCardKey,
+                          icon: Assets.svg.iconCaseSearch.svg(),
+                          title: '文字搜尋',
+                          description: '搜尋店家名稱',
+                          onTap: () {
+                            final balance = _savedBalance ?? double.tryParse(_balanceController.text.trim());
+                            SvNavigatorUtil.toTextSearch(balance: balance);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildServiceCard(
+                          key: _matchCardKey,
+                          icon: Icon(
+                            Icons.favorite,
+                            size: 40,
+                            color: _savedBalance != null && _savedBalance! > 0
+                                ? TPColors.primary500
+                                : TPColors.grayscale400,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -264,6 +324,15 @@ class _SvHomePageState extends State<SvHomePage> {
             const SizedBox(height: 32),
           ],
         ),
+          ),
+          // 使用指引
+          if (_showUsageGuide)
+            SvUsageGuide(
+              steps: _getUsageGuideSteps(),
+              onComplete: _hideUsageGuide,
+              onSkip: _hideUsageGuide,
+            ),
+        ],
       ),
     );
   }
@@ -332,6 +401,7 @@ class _SvHomePageState extends State<SvHomePage> {
 
   Widget _buildBalanceInputCard() {
     return Container(
+      key: _balanceCardKey,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         gradient: const LinearGradient(
@@ -444,12 +514,14 @@ class _SvHomePageState extends State<SvHomePage> {
     required String description,
     required VoidCallback? onTap,
     bool isEnabled = true,
+    Key? key,
   }) {
     return GestureDetector(
       onTap: isEnabled ? onTap : null,
       child: Opacity(
         opacity: isEnabled ? 1.0 : 0.5,
         child: Container(
+          key: key,
           decoration: BoxDecoration(
             color: TPColors.white,
             borderRadius: BorderRadius.circular(12),
