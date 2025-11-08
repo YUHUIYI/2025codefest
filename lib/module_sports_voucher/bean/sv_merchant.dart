@@ -2,7 +2,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'sv_merchant.g.dart';
 
-/// 動茲券合作店家資料模型
+/// 動滋券合作店家資料模型
 @JsonSerializable()
 class SvMerchant {
   final int id;

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:town_pass/module_sports_voucher/bean/sv_merchant.dart';
 
-/// 動茲券 API 服務
+/// 動滋券 API 服務
 /// 目前使用模擬資料，未來可替換為真實 API
 class SvApiService {
   static const String _mockDataPath = 'assets/mock_data/sv_merchants.json';

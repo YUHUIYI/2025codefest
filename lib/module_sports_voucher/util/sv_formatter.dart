@@ -1,6 +1,6 @@
 import 'package:intl/intl.dart';
 
-/// 動茲券格式化工具
+/// 動滋券格式化工具
 class SvFormatter {
   /// 格式化金額（新台幣）
   static String formatCurrency(double amount) {

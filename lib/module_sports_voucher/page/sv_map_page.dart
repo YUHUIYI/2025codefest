@@ -16,7 +16,7 @@ import 'package:town_pass/util/tp_colors.dart';
 import 'package:town_pass/util/tp_text.dart';
 import 'package:town_pass/util/tp_text_styles.dart';
 
-/// 動茲券地圖查詢頁
+/// 動滋券地圖查詢頁
 class SvMapPage extends StatefulWidget {
   const SvMapPage({super.key});
 
