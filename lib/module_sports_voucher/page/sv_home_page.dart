@@ -42,6 +42,7 @@ class _SvHomePageState extends State<SvHomePage> {
   final List<String> _bannerImages = const [
     'assets/image/sv_banner.png',
     'assets/image/sv_banner_2.png',
+    'assets/image/sv_banner_3.png',
   ];
 
   int _currentBannerIndex = 0;

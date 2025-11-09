@@ -44,6 +44,7 @@ class _SvMapPageState extends State<SvMapPage> {
   bool _priceFilterEnabled = false;
   double _priceThreshold = 500.0;
   bool _likeFilterEnabled = false;
+  bool _isFilterExpanded = false;  // 控制筛选栏展开/收缩
 
   Map<String, double> _storeMinProductPrices = {};
   Map<String, double> _storeDistancesKm = {};
@@ -671,75 +672,148 @@ class _SvMapPageState extends State<SvMapPage> {
               }
             },
           ),
-          // 篩選按鈕
+          // 篩選按鈕（可收縮，從左邊向右展開）
           Positioned(
             top: 16,
             left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: TPColors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: TPColors.grayscale950.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+            child: _isFilterExpanded
+                ? AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width - 32,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: TPColors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: TPColors.grayscale950.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildFilterChip(
+                              label: '距離',
+                              selected: _distanceFilterEnabled,
+                              onSelected: _setDistanceFilterEnabled,
+                            ),
+                            _buildFilterChip(
+                              label: '金額',
+                              selected: _priceFilterEnabled,
+                              onSelected: _setPriceFilterEnabled,
+                            ),
+                            _buildFilterChip(
+                              label: '收藏',
+                              selected: _likeFilterEnabled,
+                              onSelected: _setLikeFilterEnabled,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _isFilterExpanded = false;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(4),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(Icons.close, size: 20, color: TPColors.grayscale700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : InkWell(
+                    onTap: () {
+                      setState(() {
+                        _isFilterExpanded = true;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: TPColors.primary500,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: TPColors.primary500.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.menu,
+                        size: 24,
+                        color: TPColors.white,
+                      ),
+                    ),
                   ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildFilterChip(
+          ),
+          // 筛选滑块（如果展开且启用）
+          if (_isFilterExpanded && (_distanceFilterEnabled || _priceFilterEnabled))
+            Positioned(
+              top: 80,
+              left: 16,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width - 32,
+                ),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: TPColors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: TPColors.grayscale950.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_distanceFilterEnabled) ...[
+                      _buildFilterSlider(
                         label: '距離',
-                        selected: _distanceFilterEnabled,
-                        onSelected: _setDistanceFilterEnabled,
+                        valueLabel: '${_distanceThresholdKm.toStringAsFixed(1)} 公里內',
+                        value: _distanceThresholdKm,
+                        min: _distanceSliderMin,
+                        max: _distanceSliderMax,
+                        onChanged: _updateDistanceThreshold,
                       ),
-                      _buildFilterChip(
-                        label: '金額',
-                        selected: _priceFilterEnabled,
-                        onSelected: _setPriceFilterEnabled,
-                      ),
-                      _buildFilterChip(
-                        label: '收藏',
-                        selected: _likeFilterEnabled,
-                        onSelected: _setLikeFilterEnabled,
-                      ),
+                      if (_priceFilterEnabled) const SizedBox(height: 12),
                     ],
-                  ),
-                  if (_distanceFilterEnabled) ...[
-                    const SizedBox(height: 12),
-                    _buildFilterSlider(
-                      label: '距離',
-                      valueLabel: '${_distanceThresholdKm.toStringAsFixed(1)} 公里內',
-                      value: _distanceThresholdKm,
-                      min: _distanceSliderMin,
-                      max: _distanceSliderMax,
-                      onChanged: _updateDistanceThreshold,
-                    ),
+                    if (_priceFilterEnabled)
+                      _buildFilterSlider(
+                        label: '金額上限',
+                        valueLabel: '≤ ${SvFormatter.formatCurrency(_priceThreshold)}',
+                        value: _priceThreshold,
+                        min: _priceSliderMin,
+                        max: _priceSliderMax,
+                        onChanged: _updatePriceThreshold,
+                      ),
                   ],
-                  if (_priceFilterEnabled) ...[
-                    const SizedBox(height: 12),
-                    _buildFilterSlider(
-                      label: '金額上限',
-                      valueLabel: '≤ ${SvFormatter.formatCurrency(_priceThreshold)}',
-                      value: _priceThreshold,
-                      min: _priceSliderMin,
-                      max: _priceSliderMax,
-                      onChanged: _updatePriceThreshold,
-                    ),
-                  ],
-                ],
+                ),
               ),
             ),
-          ),
           // 店家資訊卡
           if (_selectedMerchant != null)
             Positioned(
