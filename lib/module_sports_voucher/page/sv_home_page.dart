@@ -181,6 +181,51 @@ class _SvHomePageState extends State<SvHomePage> {
     }
   }
 
+  void _showUsageGuideDialog() {
+    // 延迟显示，确保所有元素都已渲染完成
+    // 使用多个 postFrameCallback 确保位置计算准确
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _showUsageGuide = true;
+          });
+        }
+      });
+    });
+  }
+
+  void _hideUsageGuide() {
+    setState(() {
+      _showUsageGuide = false;
+    });
+  }
+
+  List<SvUsageGuideStep> _getUsageGuideSteps() {
+    return [
+      SvUsageGuideStep(
+        title: '輸入剩餘金額',
+        description: '在這裡輸入您的動滋券剩餘金額，然後點擊「儲存餘額」按鈕。儲存後，系統會根據您的餘額推薦適合的店家。',
+        targetKey: _balanceCardKey,
+      ),
+      SvUsageGuideStep(
+        title: '地圖查詢',
+        description: '點擊此卡片可以在地圖上查看所有合作店家的位置，方便您找到附近的店家。',
+        targetKey: _mapCardKey,
+      ),
+      SvUsageGuideStep(
+        title: '文字搜尋',
+        description: '點擊此卡片可以透過店家名稱或商品名稱來搜尋您想要的店家。',
+        targetKey: _textSearchCardKey,
+      ),
+      SvUsageGuideStep(
+        title: '餘額配對',
+        description: '點擊此卡片可以進入配對模式，透過滑動的方式來瀏覽和配對店家。儲存餘額後才能使用此功能。',
+        targetKey: _matchCardKey,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     print('[DEBUG] SvHomePage.build called');
@@ -234,56 +279,17 @@ class _SvHomePageState extends State<SvHomePage> {
                         children: [
                           Expanded(
                             child: _buildServiceCard(
+                              key: _mapCardKey,
                               icon: Assets.svg.iconLocationSearch24.svg(),
                               title: '地圖查詢',
                               description: '查看店家位置',
                               onTap: _onMapQueryTap,
                             ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildServiceCard(
-                          key: _mapCardKey,
-                          icon: Assets.svg.iconLocationSearch24.svg(),
-                          title: '地圖查詢',
-                          description: '查看店家位置',
-                          onTap: () {
-                            final balance = _savedBalance ?? double.tryParse(_balanceController.text.trim());
-                            if (balance != null && balance > 0) {
-                              SvNavigatorUtil.toMap(balance: balance);
-                            } else {
-                              SvNavigatorUtil.toMap(balance: null);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildServiceCard(
-                          key: _textSearchCardKey,
-                          icon: Assets.svg.iconCaseSearch.svg(),
-                          title: '文字搜尋',
-                          description: '搜尋店家名稱',
-                          onTap: () {
-                            final balance = _savedBalance ?? double.tryParse(_balanceController.text.trim());
-                            SvNavigatorUtil.toTextSearch(balance: balance);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildServiceCard(
-                          key: _matchCardKey,
-                          icon: Icon(
-                            Icons.favorite,
-                            size: 40,
-                            color: _savedBalance != null && _savedBalance! > 0
-                                ? TPColors.primary500
-                                : TPColors.grayscale400,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildServiceCard(
+                              key: _textSearchCardKey,
                               icon: Assets.svg.iconCaseSearch.svg(),
                               title: '文字搜尋',
                               description: '搜尋店家名稱',
@@ -293,6 +299,7 @@ class _SvHomePageState extends State<SvHomePage> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildServiceCard(
+                              key: _matchCardKey,
                               icon: Icon(
                                 Icons.favorite,
                                 size: 40,
